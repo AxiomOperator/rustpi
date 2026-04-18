@@ -47,7 +47,11 @@ chrono = { version = "0.4", features = ["serde"] }
 tokio-util = { version = "0.7", features = ["rt"] }
 
 # HTTP client
-reqwest = { version = "0.12", features = ["json"] }
+reqwest = { version = "0.12", features = ["json", "stream"] }
+
+# Async streams
+async-stream = "0.3"
+bytes = "1"
 
 # Encryption
 aes-gcm = "0.10"

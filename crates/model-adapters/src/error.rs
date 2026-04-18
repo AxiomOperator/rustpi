@@ -23,4 +23,20 @@ pub enum ProviderError {
     Serialization(#[from] serde_json::Error),
     #[error("not implemented: {0}")]
     NotImplemented(String),
+    #[error("authentication failed: {0}")]
+    Unauthorized(String),
+    #[error("access forbidden: {0}")]
+    Forbidden(String),
+    #[error("request timed out")]
+    Timeout,
+    #[error("provider unavailable: {0}")]
+    Unavailable(String),
+    #[error("invalid request: {0}")]
+    InvalidRequest(String),
+    #[error("capability not supported by this provider: {0}")]
+    UnsupportedCapability(String),
+    #[error("malformed response from provider: {0}")]
+    MalformedResponse(String),
+    #[error("provider not configured: {0}")]
+    NotConfigured(String),
 }

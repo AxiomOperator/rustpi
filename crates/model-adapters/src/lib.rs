@@ -16,6 +16,8 @@ pub mod capability;
 pub mod error;
 pub mod provider;
 pub mod registry;
+pub mod adapters;
+pub mod wire;
 
 pub use agent_core::types::{ModelId, ProviderId, ToolCall, ToolResult};
 pub use capability::ProviderCapabilities;
@@ -26,3 +28,7 @@ pub use provider::{
     TokenUsage,
 };
 pub use registry::ProviderRegistry;
+pub use adapters::openai::{OpenAiAdapter, OpenAiConfig};
+pub use adapters::llamacpp::{LlamaCppAdapter, LlamaCppConfig};
+pub use adapters::vllm::{VllmAdapter, VllmConfig};
+pub use adapters::copilot::{CopilotAdapter, CopilotConfig};

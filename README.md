@@ -2,7 +2,7 @@
 
 A native Rust AI agent platform with multi-provider model access, durable sessions, Obsidian-backed local-first memory, and a rich terminal UI.
 
-**Status: Phases 0–3 complete — 132 tests passing**
+**Status: Phases 0–4 complete — provider integrations live**
 
 ---
 
@@ -48,7 +48,7 @@ session-store   event-log    config-core
 | `policy-engine` | Allow/deny/approval rule evaluation with glob matching | ✅ Phase 2 |
 | `event-log` | Append-only JSONL event log, replay reader, audit records | ✅ Phase 2 |
 | `auth-core` | OAuth browser flow, RFC 8628 device flow, API key path, AES-256-GCM token store, refresh | ✅ Phase 3 |
-| `model-adapters` | `ModelProvider` trait, capability metadata, provider registry | ✅ Phase 3 |
+| `model-adapters` | `ModelProvider` trait, provider registry; OpenAI-compatible, llama.cpp, vLLM, and GitHub Copilot adapters | ✅ Phase 4 |
 | `tool-runtime` | Tool trait, registry, subprocess runner with timeout | 🔧 Phase 5 |
 | `context-engine` | Context window assembly, ignore rules, token budgeting | 🔧 Phase 6 |
 | `session-store` | Durable session persistence (SQLite / sled / in-memory) | 🔧 Phase 7 |
@@ -122,15 +122,15 @@ Tokens are persisted encrypted at rest (AES-256-GCM) in `~/.config/rustpi/tokens
 
 ---
 
-## Supported providers (planned)
+## Supported Providers
 
-| Provider | Auth | Chat | Streaming | Embeddings | Tools |
+| Provider | Auth | Chat | Streaming | Embeddings | Model Discovery |
 |---|---|---|---|---|---|
-| OpenAI-compatible | API key | Phase 4 | Phase 4 | Phase 4 | Phase 4 |
-| llama.cpp | None | Phase 4 | Phase 4 | Phase 4 | Phase 4 |
-| vLLM | None | Phase 4 | Phase 4 | Phase 4 | Phase 4 |
-| GitHub Copilot | Device code | Phase 4 | Phase 4 | — | Phase 4 |
-| Gemini | OAuth / API key | Phase 4 | Phase 4 | Phase 4 | Phase 4 |
+| OpenAI-compatible | API key | ✅ | ✅ | ✅ | ✅ |
+| llama.cpp | None (local) | ✅ | ✅ | ⚙️ opt-in | ✅ active model |
+| vLLM | None / API key | ✅ | ✅ | ✅ | ✅ |
+| GitHub Copilot | OAuth device flow | ✅ | ✅ | ❌ | Static list |
+| Gemini | OAuth / API key | 🔲 Planned | 🔲 Planned | 🔲 Planned | 🔲 Planned |
 
 ---
 
@@ -177,7 +177,7 @@ The log is the source of truth for session state and supports full replay for de
 | 1 | Core runtime skeleton | ✅ Complete |
 | 2 | Config, policy, and event logging | ✅ Complete |
 | 3 | Model adapter abstraction and auth core | ✅ Complete |
-| 4 | First provider integrations | 🔲 Next |
+| 4 | First provider integrations | ✅ Complete |
 | 5 | Tool runtime MVP | 🔲 Planned |
 | 6 | Context engine MVP | 🔲 Planned |
 | 7 | Session stores and durable memory backends | 🔲 Planned |
@@ -219,6 +219,57 @@ rustpi/
 ├── CONTRIBUTING.md
 └── project.md            # Phased development plan
 ```
+
+---
+
+## Provider Configuration
+
+### OpenAI-compatible
+```toml
+[providers.openai]
+base_url = "https://api.openai.com/v1"
+api_key = "sk-..."   # or set OPENAI_API_KEY env var
+```
+
+### llama.cpp (local)
+```toml
+[providers.llamacpp]
+base_url = "http://localhost:8080/v1"
+# No authentication required
+```
+
+### vLLM (local)
+```toml
+[providers.vllm]
+base_url = "http://localhost:8000/v1"
+# api_key is optional — required only if vLLM was started with --api-key
+```
+
+### GitHub Copilot
+Requires a GitHub account with an active Copilot subscription.
+Authentication uses the GitHub device flow:
+```bash
+rustpi auth login --provider copilot
+# Follow the device code instructions to authenticate
+```
+
+---
+
+## Running Tests
+
+```bash
+# All tests
+cargo test --workspace
+
+# Provider adapter tests only (includes mock HTTP server tests)
+cargo test -p model-adapters
+
+# Specific adapter tests
+cargo test -p model-adapters adapters::openai
+cargo test -p model-adapters adapters::copilot
+```
+
+Note: Provider integration tests use `wiremock` mock servers and do not require live API credentials.
 
 ---
 

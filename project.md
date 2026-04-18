@@ -306,35 +306,44 @@ Get real model traffic working end-to-end.
 
 ### Deliverables
 
-* [ ] OpenAI-compatible adapter
-* [ ] local llama.cpp adapter
-* [ ] local vLLM adapter
-* [ ] one OAuth/device-auth provider adapter
-* [ ] model listing and streaming support
+* [x] OpenAI-compatible adapter
+* [x] local llama.cpp adapter
+* [x] local vLLM adapter
+* [x] one OAuth/device-auth provider adapter
+* [x] model listing and streaming support
 
 ### Tasks
 
-* [ ] Build OpenAI-compatible adapter
-* [ ] Build llama.cpp adapter
-* [ ] Build vLLM adapter
-* [ ] Build first hosted auth-driven provider adapter
+* [x] Build OpenAI-compatible adapter
+* [x] Build llama.cpp adapter
+* [x] Build vLLM adapter
+* [x] Build first hosted auth-driven provider adapter
 
-  * [ ] GitHub Copilot or Gemini first
-* [ ] Implement:
+  * [x] GitHub Copilot or Gemini first
+* [x] Implement:
 
-  * [ ] non-streaming chat
-  * [ ] streaming chat
-  * [ ] embeddings where available
-  * [ ] model discovery
-* [ ] Normalize provider errors
-* [ ] Add integration tests against mock/provider test harnesses
+  * [x] non-streaming chat
+  * [x] streaming chat
+  * [x] embeddings where available
+  * [x] model discovery
+* [x] Normalize provider errors
+* [x] Add integration tests against mock/provider test harnesses
 
 ### Exit criteria
 
-* [ ] At least 4 adapters work end-to-end
-* [ ] Streaming works reliably
-* [ ] Model discovery works
-* [ ] Errors normalize into a shared internal schema
+* [x] At least 4 adapters work end-to-end
+* [x] Streaming works reliably
+* [x] Model discovery works
+* [x] Errors normalize into a shared internal schema
+
+### Implementation notes
+
+- All adapters live in `crates/model-adapters/src/adapters/` (`openai.rs`, `llamacpp.rs`, `vllm.rs`, `copilot.rs`).
+- OpenAI wire types and error normalisation are extracted into `crates/model-adapters/src/wire.rs`.
+- `LlamaCppAdapter` and `VllmAdapter` wrap `OpenAiAdapter` directly — same HTTP code path, different base URLs and auth defaults.
+- `CopilotAdapter` uses RFC 8628 device flow: exchanges a GitHub OAuth token for a short-lived Copilot API token and auto-refreshes on 401. Embeddings and model discovery are not supported (static model list).
+- `ProviderError` extended with 8 new variants: `Unauthorized`, `Forbidden`, `Timeout`, `Unavailable`, `InvalidRequest`, `UnsupportedCapability`, `MalformedResponse`, `NotConfigured`.
+- Integration tests use `wiremock` mock HTTP server — no live API credentials required.
 
 ---
 
