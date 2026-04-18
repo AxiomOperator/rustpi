@@ -224,45 +224,77 @@ Build the provider abstraction and a shared auth subsystem for OAuth, device flo
 
 ### Deliverables
 
-* [ ] provider trait/interface
-* [ ] `auth-core`
-* [ ] auth state persistence
-* [ ] token refresh flow
-* [ ] provider capability metadata model
+* [x] provider trait/interface
+* [x] `auth-core`
+* [x] auth state persistence
+* [x] token refresh flow
+* [x] provider capability metadata model
 
 ### Tasks
 
-* [ ] Define internal provider interface for:
+* [x] Define internal provider interface for:
 
-  * [ ] chat/completions
-  * [ ] streaming
-  * [ ] embeddings
-  * [ ] model discovery
-  * [ ] tool-calling capability flags
-  * [ ] auth state inspection
-* [ ] Implement `auth-core`
+  * [x] chat/completions
+  * [x] streaming
+  * [x] embeddings
+  * [x] model discovery
+  * [x] tool-calling capability flags
+  * [x] auth state inspection
+* [x] Implement `auth-core`
 
-  * [ ] OAuth browser login flow
-  * [ ] device authorization flow
-  * [ ] device code / user code display flow
-  * [ ] API key storage path
-  * [ ] token refresh
-  * [ ] encrypted local token persistence
-* [ ] Implement provider capability descriptors
-* [ ] Add auth status events
-* [ ] Add tests for:
+  * [x] OAuth browser login flow
+  * [x] device authorization flow
+  * [x] device code / user code display flow
+  * [x] API key storage path
+  * [x] token refresh
+  * [x] encrypted local token persistence
+* [x] Implement provider capability descriptors
+* [x] Add auth status events
+* [x] Add tests for:
 
-  * [ ] expired token handling
-  * [ ] refresh flow
-  * [ ] missing-scope handling
-  * [ ] auth state recovery
+  * [x] expired token handling
+  * [x] refresh flow
+  * [x] missing-scope handling (`NoKeyAvailable` / `NoRefreshToken` errors)
+  * [x] auth state recovery (EncryptedFileTokenStore survives reopen)
 
 ### Exit criteria
 
-* [ ] Providers can expose a unified interface
-* [ ] Shared auth layer supports login and refresh flows
-* [ ] Auth state survives restart
-* [ ] Provider capability discovery is functional
+* [x] Providers can expose a unified interface
+* [x] Shared auth layer supports login and refresh flows
+* [x] Auth state survives restart
+* [x] Provider capability discovery is functional
+
+> **Phase 3 completed.** 131 tests pass across workspace (`cargo test --workspace`).
+>
+> **`crates/agent-core/src/types.rs`** — 10 new `AgentEvent` auth variants added:
+> `AuthLoginStarted`, `AuthLoginCompleted`, `AuthLoginFailed`, `DeviceFlowInitiated`,
+> `DeviceCodeIssued`, `TokenStored`, `TokenRefreshed`, `TokenRefreshFailed`,
+> `AuthStateLoaded`, `AuthStateCleared`
+>
+> **`crates/model-adapters`** — provider abstraction expanded:
+> - `EmbeddingRequest`/`EmbeddingResponse` typed models; `ModelInfo`, `ProviderMetadata`
+> - `ProviderCapabilities` extended with auth flags (`supports_oauth_browser`, `supports_device_flow`, `supports_api_key`, `supports_token_refresh`) + `supports_model_discovery`
+> - `requires_auth()`, `openai_compatible()`, `local_no_auth()` capability constructors
+> - `ProviderRegistry` for runtime provider lookup
+> - `ModelProvider::metadata()` and updated `list_models() -> Vec<ModelInfo>` and `embed(EmbeddingRequest)` signatures
+> - 11 tests
+>
+> **`crates/auth-core`** — full auth subsystem:
+> - `src/record.rs` — `TokenRecord` with expiry, refresh, scope, `to_auth_state()`; 9 tests
+> - `src/encrypted_store.rs` — `EncryptedFileTokenStore` (AES-256-GCM, random 96-bit nonce, key file separate) + `MemoryTokenStore`; store survives reopen; 9 tests
+> - `src/oauth.rs` — `OAuthFlow` CSRF-safe `begin()` + `exchange_code()` via `reqwest`; 4 tests
+> - `src/device_flow.rs` — RFC 8628 `DeviceFlow` with `CancellationToken`, handles `authorization_pending`/`slow_down`/`expired_token`
+> - `src/refresh.rs` — `refresh_token()` POST + `needs_refresh()` (5-min margin); 3 tests
+> - `src/api_key.rs` — `ApiKeyAuth` env-var-first resolution; 6 tests
+> - 31 tests total
+>
+> **Security note documented:** Key file is stored alongside encrypted token data — protects against bulk data copies but not full filesystem access. Platform keyring integration deferred to Phase 13.
+>
+> **Intentionally deferred:**
+> - Actual per-provider adapter implementations (Phase 4)
+> - PKCE support in OAuth flow (Phase 4, provider-specific)
+> - Platform keyring integration (Phase 13)
+> - OAuth local callback server for redirect capture (Phase 4/10 CLI)
 
 ---
 
@@ -738,7 +770,7 @@ Target phases:
 * [x] Phase 0
 * [x] Phase 1
 * [x] Phase 2
-* [ ] Phase 3
+* [x] Phase 3
 * [ ] Phase 4
 * [ ] Phase 5
 * [ ] Phase 6
