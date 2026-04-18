@@ -21,4 +21,6 @@ pub enum ProviderError {
     Network(String),
     #[error(transparent)]
     Serialization(#[from] serde_json::Error),
+    #[error("not implemented: {0}")]
+    NotImplemented(String),
 }

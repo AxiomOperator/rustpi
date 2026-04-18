@@ -265,6 +265,65 @@ pub enum AgentEvent {
         state: AuthState,
         timestamp: DateTime<Utc>,
     },
+    /// A login attempt was initiated for a provider.
+    AuthLoginStarted {
+        provider: ProviderId,
+        flow: AuthFlow,
+        timestamp: DateTime<Utc>,
+    },
+    /// Login completed successfully and a token was obtained.
+    AuthLoginCompleted {
+        provider: ProviderId,
+        flow: AuthFlow,
+        timestamp: DateTime<Utc>,
+    },
+    /// Login attempt failed.
+    AuthLoginFailed {
+        provider: ProviderId,
+        flow: AuthFlow,
+        reason: String,
+        timestamp: DateTime<Utc>,
+    },
+    /// Device authorization flow was started; user must visit a URL.
+    DeviceFlowInitiated {
+        provider: ProviderId,
+        verification_uri: String,
+        user_code: String,
+        expires_in_secs: u64,
+        timestamp: DateTime<Utc>,
+    },
+    /// Device code was issued and polling has begun.
+    DeviceCodeIssued {
+        provider: ProviderId,
+        interval_secs: u64,
+        timestamp: DateTime<Utc>,
+    },
+    /// A token was successfully stored to persistent storage.
+    TokenStored {
+        provider: ProviderId,
+        timestamp: DateTime<Utc>,
+    },
+    /// A token was successfully refreshed.
+    TokenRefreshed {
+        provider: ProviderId,
+        timestamp: DateTime<Utc>,
+    },
+    /// Token refresh failed.
+    TokenRefreshFailed {
+        provider: ProviderId,
+        reason: String,
+        timestamp: DateTime<Utc>,
+    },
+    /// Auth state was loaded from persistent storage on startup.
+    AuthStateLoaded {
+        provider: ProviderId,
+        timestamp: DateTime<Utc>,
+    },
+    /// Auth state was cleared for a provider.
+    AuthStateCleared {
+        provider: ProviderId,
+        timestamp: DateTime<Utc>,
+    },
 
     // --- Context ---
     ContextBuilt {

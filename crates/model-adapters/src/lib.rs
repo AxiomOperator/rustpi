@@ -15,7 +15,14 @@
 pub mod capability;
 pub mod error;
 pub mod provider;
+pub mod registry;
 
 pub use agent_core::types::{ModelId, ProviderId, ToolCall, ToolResult};
 pub use capability::ProviderCapabilities;
 pub use error::ProviderError;
+pub use provider::{
+    ChatMessage, CompletionRequest, CompletionResponse, EmbeddingRequest, EmbeddingResponse,
+    FinishReason, MessageContent, ModelInfo, ModelProvider, ProviderMetadata, Role, TokenDelta,
+    TokenUsage,
+};
+pub use registry::ProviderRegistry;

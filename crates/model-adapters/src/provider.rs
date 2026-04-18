@@ -1,7 +1,7 @@
 //! Core provider trait.
 
 use crate::{ProviderCapabilities, ProviderError};
-use agent_core::types::{AuthState, ModelId, ProviderId, ToolCall};
+use agent_core::types::{AuthFlow, AuthState, ModelId, ProviderId, ToolCall};
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 
@@ -62,8 +62,11 @@ pub trait ModelProvider: Send + Sync {
     fn provider_id(&self) -> &ProviderId;
     fn capabilities(&self, model: &ModelId) -> ProviderCapabilities;
 
-    /// List available models.
-    async fn list_models(&self) -> Result<Vec<ModelId>, ProviderError>;
+    /// Static provider metadata (name, description, supported auth flows).
+    fn metadata(&self) -> ProviderMetadata;
+
+    /// List available models with their metadata.
+    async fn list_models(&self) -> Result<Vec<ModelInfo>, ProviderError>;
 
     /// Non-streaming chat completion.
     async fn complete(
@@ -80,8 +83,8 @@ pub trait ModelProvider: Send + Sync {
         ProviderError,
     >;
 
-    /// Generate embeddings for a list of inputs.
-    async fn embed(&self, inputs: Vec<String>) -> Result<Vec<Vec<f32>>, ProviderError>;
+    /// Generate embeddings for the given inputs.
+    async fn embed(&self, request: EmbeddingRequest) -> Result<EmbeddingResponse, ProviderError>;
 
     /// Current auth state for this provider.
     async fn auth_state(&self) -> AuthState;
@@ -100,4 +103,49 @@ pub struct TokenUsage {
     pub prompt_tokens: u32,
     pub completion_tokens: u32,
     pub total_tokens: u32,
+}
+
+/// Embedding generation request.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EmbeddingRequest {
+    pub model: ModelId,
+    pub inputs: Vec<String>,
+    /// Optional dimensions hint (for models that support it).
+    pub dimensions: Option<u32>,
+}
+
+/// Embedding generation response.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EmbeddingResponse {
+    pub embeddings: Vec<Vec<f32>>,
+    pub model: ModelId,
+    pub usage: TokenUsage,
+}
+
+/// Metadata about a specific model offered by a provider.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ModelInfo {
+    pub id: ModelId,
+    pub display_name: Option<String>,
+    /// Maximum context window in tokens, if known.
+    pub context_window: Option<u32>,
+    /// Whether this model supports tool/function calling.
+    pub supports_tools: bool,
+    /// Whether this model supports vision/image inputs.
+    pub supports_vision: bool,
+    /// Whether this model supports embeddings.
+    pub supports_embeddings: bool,
+}
+
+/// Static metadata about a provider (not per-model).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ProviderMetadata {
+    pub id: ProviderId,
+    pub display_name: String,
+    /// Human-readable description.
+    pub description: String,
+    /// Auth flows supported by this provider.
+    pub supported_auth_flows: Vec<AuthFlow>,
+    /// Whether this provider requires network access.
+    pub requires_network: bool,
 }

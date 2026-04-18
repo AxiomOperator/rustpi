@@ -1,7 +1,6 @@
 //! Token storage abstraction.
 //!
 //! Tokens are stored encrypted at rest. The storage backend is configurable.
-//! Phase 0 stub — encryption and persistence deferred to Phase 3.
 
 use crate::{AuthError, AuthState, ProviderId};
 
