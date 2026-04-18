@@ -10,6 +10,8 @@ pub enum MemorySyncError {
     Conflict { doc: String, reason: String },
     #[error("malformed markdown in '{0}'")]
     MalformedMarkdown(String),
+    #[error("qdrant error: {0}")]
+    Qdrant(String),
     #[error(transparent)]
     Io(#[from] std::io::Error),
 }

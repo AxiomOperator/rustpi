@@ -70,6 +70,7 @@ pub struct MemoryConfig {
     /// Whether to enable Qdrant vector memory.
     pub qdrant_enabled: bool,
     pub qdrant_url: Option<String>,
+    pub postgres_url: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]

@@ -72,6 +72,7 @@ impl Merge for MemoryConfig {
             session_backend: over.session_backend,
             qdrant_enabled: over.qdrant_enabled || base.qdrant_enabled,
             qdrant_url: over.qdrant_url.or(base.qdrant_url),
+            postgres_url: over.postgres_url.or(base.postgres_url),
         }
     }
 }

@@ -1,13 +1,12 @@
-//! Session and run persistence layer.
-//!
-//! Provides pluggable backends behind trait interfaces:
-//! - SQLite (default, local)
-//! - sled (embedded key-value)
-//! - PostgreSQL (production)
-//!
-//! Phase 0 stub — backend implementations deferred to Phase 7.
-
 pub mod error;
+pub mod factory;
+pub mod postgres;
+pub mod sled_store;
+pub mod sqlite;
 pub mod store;
 
 pub use error::StoreError;
+pub use store::{
+    MemoryRecord, MemoryStore, RunRecord, RunStatus, RunStore, SessionRecord, SessionStore,
+    SummaryRecord, SummaryStore,
+};

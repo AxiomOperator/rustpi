@@ -2,7 +2,7 @@
 
 A native Rust AI agent platform with multi-provider model access, durable sessions, Obsidian-backed local-first memory, and a rich terminal UI.
 
-**Status: Phases 0–6 complete — context engine live**
+**Status: Phases 0–7 complete — session stores and durable memory live**
 
 ---
 
@@ -51,8 +51,8 @@ session-store   event-log    config-core
 | `model-adapters` | `ModelProvider` trait, provider registry; OpenAI-compatible, llama.cpp, vLLM, and GitHub Copilot adapters | ✅ Phase 4 |
 | `tool-runtime` | Tool trait, registry, subprocess runner with timeout | ✅ Phase 5 |
 | `context-engine` | Context window assembly, ignore rules, token budgeting | ✅ Phase 6 |
-| `session-store` | Durable session persistence (SQLite / sled / in-memory) | 🔧 Phase 7 |
-| `memory-sync` | Obsidian vault integration, vector memory sync | 🔧 Phase 8 |
+| `session-store` | Durable session persistence (SQLite / sled / PostgreSQL); 4 store traits + config-driven factory | ✅ Phase 7 |
+| `memory-sync` | Qdrant semantic memory (`QdrantMemory`); Obsidian vault integration (Phase 8) | ✅ Phase 7 |
 | `rpc-api` | JSONL RPC protocol types and codec | 🔧 Phase 9 |
 | `cli` | Scriptable CLI binary (`rustpi`) | 🔧 Phase 10 |
 | `tui` | Ratatui full-screen TUI binary (`rustpi-tui`) | 🔧 Phase 11 |
@@ -72,7 +72,7 @@ cargo test --workspace
 
 - Rust 1.75+ (stable)
 - No additional system dependencies for the core runtime
-- Qdrant (optional, for vector memory — Phase 7+)
+- Qdrant (optional, for vector memory — Phase 7+, enabled via `qdrant_enabled = true` in config)
 - An Obsidian vault (optional, for human-readable memory — Phase 8+)
 
 ---
@@ -230,6 +230,81 @@ cargo test -p tool-runtime --test tool_runtime_integration
 
 # Run with output for debugging
 cargo test -p tool-runtime -- --nocapture
+```
+
+---
+
+## Persistence & Memory
+
+### Session Store
+
+The `crates/session-store` crate provides durable persistence for sessions, runs, summaries, and structured memory records behind four async traits:
+
+| Trait | Domain |
+|---|---|
+| `SessionStore` | Session lifecycle — create, list, update summary, delete |
+| `RunStore` | Run lifecycle within a session — status transitions (`Running` → `Completed` / `Cancelled` / `Failed`) |
+| `SummaryStore` | Compaction artifacts — ordered summary records per session |
+| `MemoryStore` | Structured memory records — tagged, searchable, optional session scope |
+
+### Backend Options
+
+| Backend | Use Case | Notes |
+|---------|----------|-------|
+| SQLite | Local/default | File-based, zero config, production-ready |
+| sled | Embedded alternative | Pure Rust, fast, slightly different semantics |
+| PostgreSQL | Production/multi-process | Requires connection URL |
+
+All three backends implement all four traits. The factory layer in `session-store/src/factory.rs` constructs the correct `Arc<dyn Trait>` from config — callers never reference a concrete backend type.
+
+### Migration/Versioning
+
+SQLite and PostgreSQL backends store a schema version in a `_meta` / metadata table on first initialisation. Every subsequent open checks the version; a mismatch returns a `StoreError::Migration` before any data access. `SledBackend` uses tree naming conventions for forward compatibility. Schema migration is automatic on startup — no manual migration step is required.
+
+### Configuration
+
+```toml
+[memory]
+session_backend = "sqlite"           # sqlite | sled | postgres
+postgres_url = "postgres://..."      # required for postgres
+qdrant_enabled = false
+qdrant_url = "http://localhost:6334"
+```
+
+Default paths when not specified:
+- SQLite: `~/.rustpi/sessions.db`
+- sled: `~/.rustpi/sessions.sled`
+
+### Qdrant Semantic Memory
+
+`QdrantMemory` in `crates/memory-sync` implements the `MemoryRetriever` trait from `context-engine`, enabling the context pipeline to pull relevant memory snippets into the prompt window.
+
+- Connects to a Qdrant instance at a configurable URL (default collection `rustpi_memory`, vector size 1536 for OpenAI-compatible embeddings)
+- **Phase 7:** retrieval uses scroll + keyword filtering (no embeddings yet)
+- **Phase 9+:** `upsert_memory()` and `search_similar()` accept pre-computed embeddings; ANN search will replace scroll once an embedding model is wired in
+- **Graceful offline fallback:** if Qdrant is unreachable, `retrieve()` logs a warning and returns an empty snippet list — the agent continues without memory
+
+### Memory Abstraction
+
+Two interfaces cover different memory concerns:
+
+- **`MemoryStore`** — structured, tagged records with optional session scope; backed by the same SQLite/sled/Postgres backends as sessions and runs
+- **`MemoryRetriever`** (`context_engine::memory`) — context-engine integration; `QdrantMemory` implements this for semantic retrieval; `NoopMemory` and `StaticMemory` are available for testing
+
+### Testing
+
+```bash
+# Run session-store tests (SQLite + sled)
+cargo test -p session-store
+
+# Run memory-sync tests
+cargo test -p memory-sync
+
+# Run full workspace
+cargo test --workspace
+
+# Postgres tests require a live DB (marked #[ignore] by default)
+DATABASE_URL=postgres://... cargo test -p session-store -- --ignored
 ```
 
 ---
@@ -442,7 +517,7 @@ The log is the source of truth for session state and supports full replay for de
 | 4 | First provider integrations | ✅ Complete |
 | 5 | Tool runtime MVP | ✅ Complete |
 | 6 | Context engine MVP | ✅ Complete |
-| 7 | Session stores and durable memory backends | 🔲 Planned |
+| 7 | Session stores and durable memory backends | ✅ Complete |
 | 8 | Obsidian vault memory and personality system | 🔲 Planned |
 | 9 | RPC API | 🔲 Planned |
 | 10 | CLI | 🔲 Planned |

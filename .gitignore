@@ -54,3 +54,6 @@ criterion/
 
 # Generated docs (use `cargo doc` locally, not committed)
 /doc/
+
+# Prompts
+/prompts/

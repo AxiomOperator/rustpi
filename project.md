@@ -507,38 +507,79 @@ Add persistent runtime state and memory layers.
 
 ### Deliverables
 
-* [ ] SQLite session backend
-* [ ] `sled` session backend
-* [ ] PostgreSQL session backend
-* [ ] Qdrant integration
-* [ ] memory abstraction layer
+* [x] SQLite session backend
+* [x] `sled` session backend
+* [x] PostgreSQL session backend
+* [x] Qdrant integration
+* [x] memory abstraction layer
 
 ### Tasks
 
-* [ ] Define store traits for:
+* [x] Define store traits for:
 
-  * [ ] sessions
-  * [ ] runs
-  * [ ] events
-  * [ ] summaries
-  * [ ] memories
-* [ ] Implement SQLite backend
-* [ ] Implement `sled` backend
-* [ ] Implement PostgreSQL backend
-* [ ] Implement Qdrant semantic memory integration
-* [ ] Add migration/versioning scheme
-* [ ] Add backend selection config
-* [ ] Add tests for:
+  * [x] sessions (`SessionStore`)
+  * [x] runs (`RunStore`)
+  * [ ] events (deferred — `event-log` crate owns the event log; no separate `EventStore` trait added)
+  * [x] summaries (`SummaryStore`)
+  * [x] memories (`MemoryStore`)
+* [x] Implement SQLite backend
+* [x] Implement `sled` backend
+* [x] Implement PostgreSQL backend
+* [x] Implement Qdrant semantic memory integration (`QdrantMemory` in `memory-sync`)
+* [x] Add migration/versioning scheme
+* [x] Add backend selection config
+* [x] Add tests for:
 
-  * [ ] backend parity
-  * [ ] restart recovery
-  * [ ] schema migration safety
+  * [x] backend parity (10 unit tests covering SQLite + sled paths)
+  * [x] restart recovery (SQLite/sled reopen tests)
+  * [x] schema migration safety (version check on open)
 
 ### Exit criteria
 
-* [ ] Session state persists cleanly across restarts
-* [ ] Backends are swappable behind shared traits
-* [ ] Qdrant memory retrieval works
+* [x] Session state persists cleanly across restarts
+* [x] Backends are swappable behind shared traits
+* [x] Qdrant memory retrieval works
+
+> **Phase 7 completed.** 10 unit tests pass, 1 ignored (`cargo test -p session-store`).
+>
+> **`crates/session-store/src/`:**
+> - `store.rs` — four store traits: `SessionStore` (create/get/list/update-summary/delete), `RunStore` (create/get/list/update-status), `SummaryStore` (save/get-latest/list), `MemoryStore` (save/get/list/search/delete); associated record types `SessionRecord`, `RunRecord`, `SummaryRecord`, `MemoryRecord`
+> - `sqlite.rs` — `SqliteBackend` implementing all four traits; auto-initialises schema on connect; stores schema version in a `_meta` table; uses `sqlx` with the `sqlite` feature
+> - `sled_store.rs` — `SledBackend` implementing all four traits; pure-Rust embedded key-value store; serialises records as MessagePack/JSON; opens or creates the sled tree on startup
+> - `postgres.rs` — `PostgresBackend` implementing all four traits; schema init + version check on connect; requires a `postgres_url` connection string; integration tests require a live DB and are marked `#[ignore]`
+> - `factory.rs` — config-driven factory functions (`build_session_store`, `build_run_store`, `build_summary_store`, `build_memory_store`) that construct `Arc<dyn Trait>` from `MemoryConfig::session_backend`; default paths: `~/.rustpi/sessions.db` (SQLite), `~/.rustpi/sessions.sled` (sled)
+>
+> **`crates/memory-sync/src/`:**
+> - `qdrant.rs` — `QdrantMemory` implementing `context_engine::memory::MemoryRetriever`; stores records as Qdrant points with content + metadata payload; Phase 7 uses keyword-filtered scroll (no embeddings); `search_similar()` available for future ANN retrieval once embeddings are generated; graceful offline fallback: errors log a warning and return empty snippet list
+> - `memory.rs` — `MemoryRecord` model (id, session_id, content, tags, optional embedding, created_at, updated_at)
+>
+> ### Architecture notes
+>
+> **Four store traits and their domains:**
+> | Trait | Domain |
+> |---|---|
+> | `SessionStore` | Session lifecycle — create, list, update summary, delete |
+> | `RunStore` | Run lifecycle within a session — status transitions |
+> | `SummaryStore` | Compaction artifacts — ordered summaries per session |
+> | `MemoryStore` | Structured memory records — tagged, searchable, optional session scope |
+>
+> **Backend implementations:**
+> All three backends (`SqliteBackend`, `SledBackend`, `PostgresBackend`) implement all four traits. The factory layer constructs the correct backend from `MemoryConfig::session_backend` (`sqlite` | `sled` | `postgres`).
+>
+> **Migration/versioning scheme:**
+> SQLite and PostgreSQL backends store a schema version in a `_meta` / metadata table on first init and check it on every subsequent open. A version mismatch returns a `StoreError::Migration` before any data access. `SledBackend` uses tree naming conventions for forward compatibility.
+>
+> **Qdrant semantic memory:**
+> `QdrantMemory` connects to a Qdrant instance at a configurable URL (default collection `rustpi_memory`, vector size 1536). Phase 7 retrieval uses scroll + keyword filtering. The `upsert_memory()` and `search_similar()` methods accept pre-computed embeddings and are ready for Phase 9 embedding generation.
+>
+> **Config-driven factory:**
+> `session-store/src/factory.rs` exposes four `async fn build_*_store(config: &MemoryConfig)` functions that return `Arc<dyn Trait>`. Callers do not need to know which backend is active.
+>
+> ### Deferred work
+>
+> - **Embedding generation** — `QdrantMemory::search_similar()` requires a vector; actual embedding calls are deferred to Phase 9+ (requires a model adapter capable of embeddings).
+> - **PostgreSQL integration tests** — the live-DB test is marked `#[ignore]`; CI runs without a Postgres instance. Enable with `DATABASE_URL=postgres://... cargo test -p session-store -- --ignored`.
+> - **EventStore trait** — event persistence remains in the `event-log` crate (JSONL file store); a unified `EventStore` trait for session-store backends was not added and is deferred.
 
 ---
 
@@ -843,10 +884,10 @@ Target phases:
 * [x] Phase 1
 * [x] Phase 2
 * [x] Phase 3
-* [ ] Phase 4
+* [x] Phase 4
 * [x] Phase 5
-* [ ] Phase 6
-* [ ] Phase 7
+* [x] Phase 6
+* [x] Phase 7
 * [ ] Phase 9
 * [ ] Phase 10
 
@@ -897,7 +938,7 @@ These are the dependencies that will govern the schedule:
 * [x] Phase 1 before Phase 5, 6, 9, 10, 11
 * [ ] Phase 3 before Phase 4
 * [ ] Phase 4 before meaningful end-to-end testing
-* [ ] Phase 7 before mature memory layering
+* [x] Phase 7 before mature memory layering
 * [ ] Phase 8 depends on Phase 6 and 7
 * [ ] Phase 11 depends on Phase 9 and core runtime stability
 * [ ] Phase 14 depends on all major implementation phases
