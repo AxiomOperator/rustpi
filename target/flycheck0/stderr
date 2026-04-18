@@ -1,9 +1,16 @@
 warning: /home/administrator/rustpi/crates/config-core/Cargo.toml: version requirement `1.1.2+spec-1.1.0` for dependency `toml` includes semver metadata which will be ignored, removing the metadata is recommended to avoid confusion
-     Locking 2 packages to latest compatible versions
-      Adding ryu v1.0.23
-      Adding serde_urlencoded v0.7.1
-   0.106145982s  INFO prepare_target{force=false package_id=auth-core v0.1.0 (/home/administrator/rustpi/crates/auth-core) target="auth_core"}: cargo::core::compiler::fingerprint: fingerprint error for auth-core v0.1.0 (/home/administrator/rustpi/crates/auth-core)/Check { test: false }/TargetInner { name_inferred: true, ..: lib_target("auth_core", ["lib"], "/home/administrator/rustpi/crates/auth-core/src/lib.rs", Edition2021) }
-   0.106163885s  INFO prepare_target{force=false package_id=auth-core v0.1.0 (/home/administrator/rustpi/crates/auth-core) target="auth_core"}: cargo::core::compiler::fingerprint:     err: failed to read `/home/administrator/rustpi/target/debug/.fingerprint/auth-core-7165c2e33bbf8d01/lib-auth_core`
+   0.110722697s  INFO prepare_target{force=false package_id=context-engine v0.1.0 (/home/administrator/rustpi/crates/context-engine) target="context_engine"}: cargo::core::compiler::fingerprint: stale: changed "/home/administrator/rustpi/crates/context-engine/src/lib.rs"
+   0.110733213s  INFO prepare_target{force=false package_id=context-engine v0.1.0 (/home/administrator/rustpi/crates/context-engine) target="context_engine"}: cargo::core::compiler::fingerprint:           (vs) "/home/administrator/rustpi/target/debug/.fingerprint/context-engine-55c7bd0443921500/dep-lib-context_engine"
+   0.110736028s  INFO prepare_target{force=false package_id=context-engine v0.1.0 (/home/administrator/rustpi/crates/context-engine) target="context_engine"}: cargo::core::compiler::fingerprint:                FileTime { seconds: 1776542841, nanos: 398881383 } < FileTime { seconds: 1776543052, nanos: 752743202 }
+   0.110774311s  INFO prepare_target{force=false package_id=context-engine v0.1.0 (/home/administrator/rustpi/crates/context-engine) target="context_engine"}: cargo::core::compiler::fingerprint: fingerprint dirty for context-engine v0.1.0 (/home/administrator/rustpi/crates/context-engine)/Check { test: false }/TargetInner { name_inferred: true, ..: lib_target("context_engine", ["lib"], "/home/administrator/rustpi/crates/context-engine/src/lib.rs", Edition2021) }
+   0.110783745s  INFO prepare_target{force=false package_id=context-engine v0.1.0 (/home/administrator/rustpi/crates/context-engine) target="context_engine"}: cargo::core::compiler::fingerprint:     dirty: FsStatusOutdated(StaleItem(ChangedFile { reference: "/home/administrator/rustpi/target/debug/.fingerprint/context-engine-55c7bd0443921500/dep-lib-context_engine", reference_mtime: FileTime { seconds: 1776542841, nanos: 398881383 }, stale: "/home/administrator/rustpi/crates/context-engine/src/lib.rs", stale_mtime: FileTime { seconds: 1776543052, nanos: 752743202 } }))
+   0.111525399s  INFO prepare_target{force=false package_id=context-engine v0.1.0 (/home/administrator/rustpi/crates/context-engine) target="context_engine"}: cargo::core::compiler::fingerprint: stale: changed "/home/administrator/rustpi/crates/context-engine/src/packer.rs"
+   0.111530118s  INFO prepare_target{force=false package_id=context-engine v0.1.0 (/home/administrator/rustpi/crates/context-engine) target="context_engine"}: cargo::core::compiler::fingerprint:           (vs) "/home/administrator/rustpi/target/debug/.fingerprint/context-engine-fb3ef09f74792d2a/dep-test-lib-context_engine"
+   0.111532495s  INFO prepare_target{force=false package_id=context-engine v0.1.0 (/home/administrator/rustpi/crates/context-engine) target="context_engine"}: cargo::core::compiler::fingerprint:                FileTime { seconds: 1776542841, nanos: 398881383 } < FileTime { seconds: 1776542968, nanos: 88001089 }
+   0.111554205s  INFO prepare_target{force=false package_id=context-engine v0.1.0 (/home/administrator/rustpi/crates/context-engine) target="context_engine"}: cargo::core::compiler::fingerprint: fingerprint dirty for context-engine v0.1.0 (/home/administrator/rustpi/crates/context-engine)/Check { test: true }/TargetInner { name_inferred: true, ..: lib_target("context_engine", ["lib"], "/home/administrator/rustpi/crates/context-engine/src/lib.rs", Edition2021) }
+   0.111561161s  INFO prepare_target{force=false package_id=context-engine v0.1.0 (/home/administrator/rustpi/crates/context-engine) target="context_engine"}: cargo::core::compiler::fingerprint:     dirty: FsStatusOutdated(StaleItem(ChangedFile { reference: "/home/administrator/rustpi/target/debug/.fingerprint/context-engine-fb3ef09f74792d2a/dep-test-lib-context_engine", reference_mtime: FileTime { seconds: 1776542841, nanos: 398881383 }, stale: "/home/administrator/rustpi/crates/context-engine/src/packer.rs", stale_mtime: FileTime { seconds: 1776542968, nanos: 88001089 } }))
+   0.112021929s  INFO prepare_target{force=false package_id=context-engine v0.1.0 (/home/administrator/rustpi/crates/context-engine) target="context_engine_integration"}: cargo::core::compiler::fingerprint: fingerprint error for context-engine v0.1.0 (/home/administrator/rustpi/crates/context-engine)/Check { test: true }/TargetInner { kind: "test", name: "context_engine_integration", benched: false, ..: with_path("/home/administrator/rustpi/crates/context-engine/tests/context_engine_integration.rs", Edition2021) }
+   0.112030400s  INFO prepare_target{force=false package_id=context-engine v0.1.0 (/home/administrator/rustpi/crates/context-engine) target="context_engine_integration"}: cargo::core::compiler::fingerprint:     err: failed to read `/home/administrator/rustpi/target/debug/.fingerprint/context-engine-0e312c4642aaf10c/test-integration-test-context_engine_integration`
 
 Caused by:
     No such file or directory (os error 2)
@@ -45,181 +52,5 @@ Stack backtrace:
   24: <unknown>
   25: __libc_start_main
   26: <unknown>
-   0.112215036s  INFO prepare_target{force=false package_id=reqwest v0.13.2 target="reqwest"}: cargo::core::compiler::fingerprint: fingerprint error for reqwest v0.13.2/Check { test: false }/TargetInner { ..: lib_target("reqwest", ["lib"], "/home/administrator/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/reqwest-0.13.2/src/lib.rs", Edition2021) }
-   0.112224679s  INFO prepare_target{force=false package_id=reqwest v0.13.2 target="reqwest"}: cargo::core::compiler::fingerprint:     err: failed to read `/home/administrator/rustpi/target/debug/.fingerprint/reqwest-accef025f1f2a625/lib-reqwest`
-
-Caused by:
-    No such file or directory (os error 2)
-
-Stack backtrace:
-   0: cargo_util::paths::read_bytes
-   1: cargo_util::paths::read
-   2: cargo::core::compiler::fingerprint::_compare_old_fingerprint
-   3: cargo::core::compiler::fingerprint::prepare_target
-   4: cargo::core::compiler::compile
-   5: cargo::core::compiler::compile
-   6: <cargo::core::compiler::build_runner::BuildRunner>::compile
-   7: cargo::ops::cargo_compile::compile_ws
-   8: cargo::ops::cargo_compile::compile_with_exec
-   9: cargo::ops::cargo_compile::compile
-  10: cargo::commands::check::exec
-  11: <cargo::cli::Exec>::exec
-  12: cargo::main
-  13: std::sys::backtrace::__rust_begin_short_backtrace::<fn(), ()>
-  14: std::rt::lang_start::<()>::{closure#0}
-  15: core::ops::function::impls::<impl core::ops::function::FnOnce<A> for &F>::call_once
-             at /rustc/e408947bfd200af42db322daf0fadfe7e26d3bd1/library/core/src/ops/function.rs:287:21
-  16: std::panicking::catch_unwind::do_call
-             at /rustc/e408947bfd200af42db322daf0fadfe7e26d3bd1/library/std/src/panicking.rs:581:40
-  17: std::panicking::catch_unwind
-             at /rustc/e408947bfd200af42db322daf0fadfe7e26d3bd1/library/std/src/panicking.rs:544:19
-  18: std::panic::catch_unwind
-             at /rustc/e408947bfd200af42db322daf0fadfe7e26d3bd1/library/std/src/panic.rs:359:14
-  19: std::rt::lang_start_internal::{{closure}}
-             at /rustc/e408947bfd200af42db322daf0fadfe7e26d3bd1/library/std/src/rt.rs:175:24
-  20: std::panicking::catch_unwind::do_call
-             at /rustc/e408947bfd200af42db322daf0fadfe7e26d3bd1/library/std/src/panicking.rs:581:40
-  21: std::panicking::catch_unwind
-             at /rustc/e408947bfd200af42db322daf0fadfe7e26d3bd1/library/std/src/panicking.rs:544:19
-  22: std::panic::catch_unwind
-             at /rustc/e408947bfd200af42db322daf0fadfe7e26d3bd1/library/std/src/panic.rs:359:14
-  23: std::rt::lang_start_internal
-             at /rustc/e408947bfd200af42db322daf0fadfe7e26d3bd1/library/std/src/rt.rs:171:5
-  24: main
-  25: <unknown>
-  26: __libc_start_main
-  27: <unknown>
-   0.116960819s  INFO prepare_target{force=false package_id=auth-core v0.1.0 (/home/administrator/rustpi/crates/auth-core) target="auth_core"}: cargo::core::compiler::fingerprint: fingerprint error for auth-core v0.1.0 (/home/administrator/rustpi/crates/auth-core)/Check { test: true }/TargetInner { name_inferred: true, ..: lib_target("auth_core", ["lib"], "/home/administrator/rustpi/crates/auth-core/src/lib.rs", Edition2021) }
-   0.116970031s  INFO prepare_target{force=false package_id=auth-core v0.1.0 (/home/administrator/rustpi/crates/auth-core) target="auth_core"}: cargo::core::compiler::fingerprint:     err: failed to read `/home/administrator/rustpi/target/debug/.fingerprint/auth-core-695cb40d50900570/test-lib-auth_core`
-
-Caused by:
-    No such file or directory (os error 2)
-
-Stack backtrace:
-   0: cargo_util::paths::read_bytes
-   1: cargo_util::paths::read
-   2: cargo::core::compiler::fingerprint::_compare_old_fingerprint
-   3: cargo::core::compiler::fingerprint::prepare_target
-   4: cargo::core::compiler::compile
-   5: <cargo::core::compiler::build_runner::BuildRunner>::compile
-   6: cargo::ops::cargo_compile::compile_ws
-   7: cargo::ops::cargo_compile::compile_with_exec
-   8: cargo::ops::cargo_compile::compile
-   9: cargo::commands::check::exec
-  10: <cargo::cli::Exec>::exec
-  11: cargo::main
-  12: std::sys::backtrace::__rust_begin_short_backtrace::<fn(), ()>
-  13: std::rt::lang_start::<()>::{closure#0}
-  14: core::ops::function::impls::<impl core::ops::function::FnOnce<A> for &F>::call_once
-             at /rustc/e408947bfd200af42db322daf0fadfe7e26d3bd1/library/core/src/ops/function.rs:287:21
-  15: std::panicking::catch_unwind::do_call
-             at /rustc/e408947bfd200af42db322daf0fadfe7e26d3bd1/library/std/src/panicking.rs:581:40
-  16: std::panicking::catch_unwind
-             at /rustc/e408947bfd200af42db322daf0fadfe7e26d3bd1/library/std/src/panicking.rs:544:19
-  17: std::panic::catch_unwind
-             at /rustc/e408947bfd200af42db322daf0fadfe7e26d3bd1/library/std/src/panic.rs:359:14
-  18: std::rt::lang_start_internal::{{closure}}
-             at /rustc/e408947bfd200af42db322daf0fadfe7e26d3bd1/library/std/src/rt.rs:175:24
-  19: std::panicking::catch_unwind::do_call
-             at /rustc/e408947bfd200af42db322daf0fadfe7e26d3bd1/library/std/src/panicking.rs:581:40
-  20: std::panicking::catch_unwind
-             at /rustc/e408947bfd200af42db322daf0fadfe7e26d3bd1/library/std/src/panicking.rs:544:19
-  21: std::panic::catch_unwind
-             at /rustc/e408947bfd200af42db322daf0fadfe7e26d3bd1/library/std/src/panic.rs:359:14
-  22: std::rt::lang_start_internal
-             at /rustc/e408947bfd200af42db322daf0fadfe7e26d3bd1/library/std/src/rt.rs:171:5
-  23: main
-  24: <unknown>
-  25: __libc_start_main
-  26: <unknown>
-   0.119455300s  INFO prepare_target{force=false package_id=model-adapters v0.1.0 (/home/administrator/rustpi/crates/model-adapters) target="model_adapters"}: cargo::core::compiler::fingerprint: fingerprint error for model-adapters v0.1.0 (/home/administrator/rustpi/crates/model-adapters)/Check { test: false }/TargetInner { name_inferred: true, ..: lib_target("model_adapters", ["lib"], "/home/administrator/rustpi/crates/model-adapters/src/lib.rs", Edition2021) }
-   0.119464710s  INFO prepare_target{force=false package_id=model-adapters v0.1.0 (/home/administrator/rustpi/crates/model-adapters) target="model_adapters"}: cargo::core::compiler::fingerprint:     err: failed to read `/home/administrator/rustpi/target/debug/.fingerprint/model-adapters-1bba2d7abf207916/lib-model_adapters`
-
-Caused by:
-    No such file or directory (os error 2)
-
-Stack backtrace:
-   0: cargo_util::paths::read_bytes
-   1: cargo_util::paths::read
-   2: cargo::core::compiler::fingerprint::_compare_old_fingerprint
-   3: cargo::core::compiler::fingerprint::prepare_target
-   4: cargo::core::compiler::compile
-   5: <cargo::core::compiler::build_runner::BuildRunner>::compile
-   6: cargo::ops::cargo_compile::compile_ws
-   7: cargo::ops::cargo_compile::compile_with_exec
-   8: cargo::ops::cargo_compile::compile
-   9: cargo::commands::check::exec
-  10: <cargo::cli::Exec>::exec
-  11: cargo::main
-  12: std::sys::backtrace::__rust_begin_short_backtrace::<fn(), ()>
-  13: std::rt::lang_start::<()>::{closure#0}
-  14: core::ops::function::impls::<impl core::ops::function::FnOnce<A> for &F>::call_once
-             at /rustc/e408947bfd200af42db322daf0fadfe7e26d3bd1/library/core/src/ops/function.rs:287:21
-  15: std::panicking::catch_unwind::do_call
-             at /rustc/e408947bfd200af42db322daf0fadfe7e26d3bd1/library/std/src/panicking.rs:581:40
-  16: std::panicking::catch_unwind
-             at /rustc/e408947bfd200af42db322daf0fadfe7e26d3bd1/library/std/src/panicking.rs:544:19
-  17: std::panic::catch_unwind
-             at /rustc/e408947bfd200af42db322daf0fadfe7e26d3bd1/library/std/src/panic.rs:359:14
-  18: std::rt::lang_start_internal::{{closure}}
-             at /rustc/e408947bfd200af42db322daf0fadfe7e26d3bd1/library/std/src/rt.rs:175:24
-  19: std::panicking::catch_unwind::do_call
-             at /rustc/e408947bfd200af42db322daf0fadfe7e26d3bd1/library/std/src/panicking.rs:581:40
-  20: std::panicking::catch_unwind
-             at /rustc/e408947bfd200af42db322daf0fadfe7e26d3bd1/library/std/src/panicking.rs:544:19
-  21: std::panic::catch_unwind
-             at /rustc/e408947bfd200af42db322daf0fadfe7e26d3bd1/library/std/src/panic.rs:359:14
-  22: std::rt::lang_start_internal
-             at /rustc/e408947bfd200af42db322daf0fadfe7e26d3bd1/library/std/src/rt.rs:171:5
-  23: main
-  24: <unknown>
-  25: __libc_start_main
-  26: <unknown>
-   0.120169165s  INFO prepare_target{force=false package_id=model-adapters v0.1.0 (/home/administrator/rustpi/crates/model-adapters) target="model_adapters"}: cargo::core::compiler::fingerprint: fingerprint error for model-adapters v0.1.0 (/home/administrator/rustpi/crates/model-adapters)/Check { test: true }/TargetInner { name_inferred: true, ..: lib_target("model_adapters", ["lib"], "/home/administrator/rustpi/crates/model-adapters/src/lib.rs", Edition2021) }
-   0.120177665s  INFO prepare_target{force=false package_id=model-adapters v0.1.0 (/home/administrator/rustpi/crates/model-adapters) target="model_adapters"}: cargo::core::compiler::fingerprint:     err: failed to read `/home/administrator/rustpi/target/debug/.fingerprint/model-adapters-c3ac5f650a0c9544/test-lib-model_adapters`
-
-Caused by:
-    No such file or directory (os error 2)
-
-Stack backtrace:
-   0: cargo_util::paths::read_bytes
-   1: cargo_util::paths::read
-   2: cargo::core::compiler::fingerprint::_compare_old_fingerprint
-   3: cargo::core::compiler::fingerprint::prepare_target
-   4: cargo::core::compiler::compile
-   5: <cargo::core::compiler::build_runner::BuildRunner>::compile
-   6: cargo::ops::cargo_compile::compile_ws
-   7: cargo::ops::cargo_compile::compile_with_exec
-   8: cargo::ops::cargo_compile::compile
-   9: cargo::commands::check::exec
-  10: <cargo::cli::Exec>::exec
-  11: cargo::main
-  12: std::sys::backtrace::__rust_begin_short_backtrace::<fn(), ()>
-  13: std::rt::lang_start::<()>::{closure#0}
-  14: core::ops::function::impls::<impl core::ops::function::FnOnce<A> for &F>::call_once
-             at /rustc/e408947bfd200af42db322daf0fadfe7e26d3bd1/library/core/src/ops/function.rs:287:21
-  15: std::panicking::catch_unwind::do_call
-             at /rustc/e408947bfd200af42db322daf0fadfe7e26d3bd1/library/std/src/panicking.rs:581:40
-  16: std::panicking::catch_unwind
-             at /rustc/e408947bfd200af42db322daf0fadfe7e26d3bd1/library/std/src/panicking.rs:544:19
-  17: std::panic::catch_unwind
-             at /rustc/e408947bfd200af42db322daf0fadfe7e26d3bd1/library/std/src/panic.rs:359:14
-  18: std::rt::lang_start_internal::{{closure}}
-             at /rustc/e408947bfd200af42db322daf0fadfe7e26d3bd1/library/std/src/rt.rs:175:24
-  19: std::panicking::catch_unwind::do_call
-             at /rustc/e408947bfd200af42db322daf0fadfe7e26d3bd1/library/std/src/panicking.rs:581:40
-  20: std::panicking::catch_unwind
-             at /rustc/e408947bfd200af42db322daf0fadfe7e26d3bd1/library/std/src/panicking.rs:544:19
-  21: std::panic::catch_unwind
-             at /rustc/e408947bfd200af42db322daf0fadfe7e26d3bd1/library/std/src/panic.rs:359:14
-  22: std::rt::lang_start_internal
-             at /rustc/e408947bfd200af42db322daf0fadfe7e26d3bd1/library/std/src/rt.rs:171:5
-  23: main
-  24: <unknown>
-  25: __libc_start_main
-  26: <unknown>
-    Checking reqwest v0.13.2
-    Checking auth-core v0.1.0 (/home/administrator/rustpi/crates/auth-core)
-error: could not compile `auth-core` (lib) due to 1 previous error; 1 warning emitted
-warning: build failed, waiting for other jobs to finish...
-error: could not compile `auth-core` (lib test) due to 1 previous error; 1 warning emitted
+    Checking context-engine v0.1.0 (/home/administrator/rustpi/crates/context-engine)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.49s

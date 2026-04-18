@@ -2,7 +2,7 @@
 
 A native Rust AI agent platform with multi-provider model access, durable sessions, Obsidian-backed local-first memory, and a rich terminal UI.
 
-**Status: Phases 0–5 complete — tool runtime live**
+**Status: Phases 0–6 complete — context engine live**
 
 ---
 
@@ -50,7 +50,7 @@ session-store   event-log    config-core
 | `auth-core` | OAuth browser flow, RFC 8628 device flow, API key path, AES-256-GCM token store, refresh | ✅ Phase 3 |
 | `model-adapters` | `ModelProvider` trait, provider registry; OpenAI-compatible, llama.cpp, vLLM, and GitHub Copilot adapters | ✅ Phase 4 |
 | `tool-runtime` | Tool trait, registry, subprocess runner with timeout | ✅ Phase 5 |
-| `context-engine` | Context window assembly, ignore rules, token budgeting | 🔧 Phase 6 |
+| `context-engine` | Context window assembly, ignore rules, token budgeting | ✅ Phase 6 |
 | `session-store` | Durable session persistence (SQLite / sled / in-memory) | 🔧 Phase 7 |
 | `memory-sync` | Obsidian vault integration, vector memory sync | 🔧 Phase 8 |
 | `rpc-api` | JSONL RPC protocol types and codec | 🔧 Phase 9 |
@@ -234,6 +234,168 @@ cargo test -p tool-runtime -- --nocapture
 
 ---
 
+## Context Engine
+
+The `crates/context-engine` crate assembles a token-bounded, relevance-ranked prompt context from the working directory, applying ignore rules, scoring heuristics, working-set selection, memory retrieval, and compaction.
+
+### Component table
+
+| Component | Purpose | Key Inputs | Key Outputs |
+|-----------|---------|-----------|-------------|
+| `Scanner` | Recursive filesystem discovery | Project root, `ScannerConfig` | `Vec<FileEntry>`, `ScanStats` |
+| `IgnoreEngine` | Filter excluded paths | `.gitignore` + `.contextignore` files | Pass/ignore verdict per path |
+| `relevance` | Score files for the current task | `Vec<FileEntry>`, `RelevanceHints` | `Vec<ScoredEntry>` (score 0.0–1.0) |
+| `workset` | Token-budget-aware file selection | `Vec<ScoredEntry>`, `WorksetConfig` | `WorkingSet` (selected + excluded) |
+| `compactor` | Reduce context when over budget | `Vec<SelectedFile>`, token budget, strategy | Compacted file list + summary string |
+| `MemoryRetriever` | Retrieve relevant memory snippets | `MemoryQuery` (keywords + budget) | `Vec<MemorySnippet>` |
+| `ContextPacker` | Assemble file blocks into token-bounded context | `Vec<SelectedFile>`, `Vec<MemorySnippet>`, `PackerConfig` | `PackedContext` |
+| `ContextEngine` | Orchestrate the full pipeline | `EngineConfig`, `RelevanceHints`, optional `MemoryQuery` | `(PackedContext, EngineStats)` |
+| `tokens` | Token estimation utilities | `&str` or byte count | Estimated token count, `Budget` tracker |
+
+### Pipeline flow
+
+```
+scan() → ignore filter → relevance score → workset select
+  ↓
+compact (if estimated tokens > budget × compaction_threshold)
+  ↓
+memory retrieve
+  ↓
+pack (token budget) → PackedContext
+```
+
+### Scanning
+
+`Scanner` walks the project root recursively, collecting `FileEntry` values (path, byte size, last-modified time). Configured via `ScannerConfig`:
+
+```rust
+ScannerConfig {
+    max_files: 1000,       // hard limit on files scanned
+    max_file_bytes: 512 * 1024,  // skip files larger than this
+    follow_symlinks: false,
+    ..Default::default()
+}
+```
+
+### Ignore behavior
+
+`IgnoreEngine` wraps the [`ignore`](https://crates.io/crates/ignore) crate (the same engine used by ripgrep), which automatically respects `.gitignore`, `.git/info/exclude`, and global gitignore. `.contextignore` is overlaid on top using the same glob semantics, giving projects fine-grained control over what enters the context window.
+
+### Relevance scoring
+
+`score()` and `score_all()` assign a `f32` score (0.0–1.0) to each file based on:
+- **Extension** — source files score higher than build artifacts or binaries
+- **Path proximity** — files closer to the project root or matching hint paths score higher
+- **Keyword hints** — `RelevanceHints::keywords` boost files whose paths contain hint terms
+- **Hint paths** — explicitly listed paths receive a maximum score boost
+
+```rust
+let hints = RelevanceHints {
+    keywords: vec!["auth".into(), "token".into()],
+    hint_paths: vec![PathBuf::from("src/auth.rs")],
+    root: Some(project_root.clone()),
+    ..Default::default()
+};
+```
+
+### Working-set selection
+
+`select()` picks files greedily by score (descending) while respecting the token budget and a **diversity cap** (`max_per_dir`) that prevents any single directory from dominating the working set:
+
+```rust
+WorksetConfig {
+    max_files: 50,
+    token_budget: 48_000,   // slightly over engine budget to leave room for compaction
+    min_score: 0.0,
+    max_per_dir: 10,        // at most 10 files from any one directory
+}
+```
+
+### Token budgeting
+
+Token counts use the `~4 chars/token` heuristic (`tokens::estimate()`), consistent with `agent_core::prompt::estimate_tokens`. The `Budget` struct tracks usage:
+
+```rust
+let mut budget = Budget::new(32_000);
+if budget.would_fit(file_tokens) {
+    budget.consume(file_tokens);
+}
+// budget.remaining(), budget.used, budget.is_exhausted()
+```
+
+Provider-specific byte-exact tokenization is deferred to Phase 7.
+
+### Compaction strategies
+
+If the estimated token total of the working set exceeds `token_budget × compaction_threshold` (default 1.5×), the compactor runs **before** file I/O:
+
+| Strategy | Behaviour |
+|----------|-----------|
+| `DropLow { threshold }` | Drop files with score below threshold (default) |
+| `ExtractDeclarations` | Rule-based extraction of function/type signatures (placeholder — LLM summarization deferred) |
+| `Truncate` | Proportional tail removal per file |
+
+A human-readable `compact_summary` is attached to the `PackedContext` when compaction runs.
+
+### Memory retrieval
+
+The `MemoryRetriever` trait abstracts memory backends:
+
+```rust
+#[async_trait]
+pub trait MemoryRetriever: Send + Sync {
+    async fn retrieve(&self, query: &MemoryQuery) -> Vec<MemorySnippet>;
+}
+```
+
+Built-in implementations:
+
+| Implementation | Behaviour |
+|---|---|
+| `NoopMemory` | Always returns empty (default) |
+| `StaticMemory` | Returns a fixed pre-loaded list of snippets |
+| `VaultMemory` | Reads `.md` files from an Obsidian vault directory (Phase 8 stub — no semantic search) |
+
+### Configuration
+
+```rust
+use context_engine::{ContextEngine, EngineConfig, RelevanceHints};
+use std::sync::Arc;
+
+let config = EngineConfig {
+    project_root: PathBuf::from("/workspace/myproject"),
+    token_budget: 32_000,
+    memory_budget: 2_000,
+    max_scan_files: 1000,
+    max_workset_files: 50,
+    min_relevance_score: 0.0,
+    max_per_dir: 10,
+    compaction_threshold: 1.5,
+};
+
+let engine = ContextEngine::new(config)
+    .with_memory(Arc::new(my_memory_backend));
+
+let (packed_ctx, stats) = engine
+    .build_context(hints, None)
+    .await?;
+
+// packed_ctx.render() → prompt-ready string
+// stats.total_tokens, stats.compacted, stats.truncated
+```
+
+### Testing
+
+```bash
+# Run all context-engine tests (30 unit tests)
+cargo test -p context-engine
+
+# Run with output for debugging
+cargo test -p context-engine -- --nocapture
+```
+
+---
+
 ## Policy model
 
 All runtime actions pass through the `policy-engine` crate before execution. Rules are evaluated in order with first-match-wins semantics:
@@ -279,7 +441,7 @@ The log is the source of truth for session state and supports full replay for de
 | 3 | Model adapter abstraction and auth core | ✅ Complete |
 | 4 | First provider integrations | ✅ Complete |
 | 5 | Tool runtime MVP | ✅ Complete |
-| 6 | Context engine MVP | 🔲 Planned |
+| 6 | Context engine MVP | ✅ Complete |
 | 7 | Session stores and durable memory backends | 🔲 Planned |
 | 8 | Obsidian vault memory and personality system | 🔲 Planned |
 | 9 | RPC API | 🔲 Planned |

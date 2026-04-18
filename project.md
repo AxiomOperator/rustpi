@@ -425,36 +425,77 @@ Build working-set discovery, context packing, and compaction.
 
 ### Deliverables
 
-* [ ] CWD scanner
-* [ ] ignore rule engine
-* [ ] relevance filter
-* [ ] prompt context packer
-* [ ] summarization/compaction flow
+* [x] CWD scanner
+* [x] ignore rule engine
+* [x] relevance filter
+* [x] prompt context packer
+* [x] summarization/compaction flow
 
 ### Tasks
 
-* [ ] Implement filesystem scanner
-* [ ] Implement ignore support
+* [x] Implement filesystem scanner
+* [x] Implement ignore support
 
-  * [ ] `.gitignore`
-  * [ ] tool-specific ignore config
-* [ ] Implement file relevance scoring
-* [ ] Implement working-set selection
-* [ ] Implement context packing by token budget
-* [ ] Implement compaction/summarization pipeline
-* [ ] Implement hooks to retrieve memory into context
-* [ ] Add tests for:
+  * [x] `.gitignore`
+  * [x] tool-specific ignore config (`.contextignore`)
+* [x] Implement file relevance scoring
+* [x] Implement working-set selection
+* [x] Implement context packing by token budget
+* [x] Implement compaction/summarization pipeline
+* [x] Implement hooks to retrieve memory into context
+* [x] Add tests for:
 
-  * [ ] ignore correctness
-  * [ ] token budgeting
-  * [ ] context truncation
-  * [ ] summarization fallback
+  * [x] ignore correctness
+  * [x] token budgeting
+  * [x] context truncation
+  * [x] summarization fallback
 
 ### Exit criteria
 
-* [ ] The engine can build a bounded prompt context from a real project
-* [ ] Large contexts compact cleanly
-* [ ] Relevant files and memory are pulled consistently
+* [x] The engine can build a bounded prompt context from a real project
+* [x] Large contexts compact cleanly
+* [x] Relevant files and memory are pulled consistently
+
+> **Phase 6 completed.** 30 unit tests pass (`cargo test -p context-engine`).
+>
+> **Implemented in `crates/context-engine/src/`:**
+> - `tokens.rs` — `estimate()` (4 chars/token heuristic), `estimate_bytes()`, `Budget` tracker
+> - `ignore.rs` — `IgnoreEngine` wrapping the `ignore` crate (ripgrep engine) + `.contextignore` overlay support
+> - `scanner.rs` — `Scanner` with `FileEntry` (path, size, mtime), `ScannerConfig`, `ScanStats`
+> - `relevance.rs` — `score()`, `score_all()`, `ScoredEntry`, `RelevanceHints`; heuristics over extension, path proximity to root, and caller-supplied hint keywords
+> - `workset.rs` — `select()`, `WorkingSet`, `SelectedFile`, diversity-capped selection via `max_per_dir`
+> - `packer.rs` — async `ContextPacker`, `PackedContext`, `MemorySnippet`, per-file and per-context truncation with `[truncated]` markers
+> - `compactor.rs` — `compact()` with three strategies: `DropLow` (drop files below a score threshold), `ExtractDeclarations` (rule-based header extraction), `Truncate` (proportional tail removal)
+> - `memory.rs` — `MemoryRetriever` trait, `NoopMemory`, `StaticMemory`, `VaultMemory` (Phase 8 stub — reads `.md` files, no semantic search)
+> - `engine.rs` — `ContextEngine` orchestrating the full pipeline: scan → score → select → compact (if needed) → memory retrieve → pack → `PackedContext`
+> - `error.rs` — expanded `ContextError` variants covering scan I/O, no relevant files, token overflow, memory, and packer errors
+>
+> ### Architecture notes
+>
+> **Pipeline flow:**
+> ```
+> scan() → ignore filter → relevance score → workset select
+>   ↓
+> compact (if estimated tokens > budget × compaction_threshold)
+>   ↓
+> memory retrieve (parallel with packing)
+>   ↓
+> pack (token budget) → PackedContext
+> ```
+>
+> **Token budgeting:** Uses the same `~4 chars/token` heuristic as `agent_core::prompt::estimate_tokens`. The `Budget` struct tracks `used` vs `remaining` and exposes `would_fit()` / `consume()`. Provider-specific tokenization is deferred to Phase 7.
+>
+> **Diversity cap:** `WorksetConfig::max_per_dir` prevents any single directory from dominating the working set. Files are sorted by score descending; a per-directory counter enforces the cap during selection.
+>
+> **Compaction before packing:** If the estimated token total of the working set exceeds `token_budget × compaction_threshold`, the compactor runs before file I/O. `DropLow` is the default strategy; `ExtractDeclarations` and `Truncate` are available for more aggressive compaction.
+>
+> **Memory integration:** `ContextEngine::with_memory()` accepts any `Arc<dyn MemoryRetriever>`. The memory budget is carved out of the total token budget before file blocks are packed.
+>
+> ### Deferred work
+>
+> - **LLM-backed summarization** — `ExtractDeclarations` strategy uses rule-based line extraction only; true LLM summarization is deferred.
+> - **`VaultMemory`** — reads `.md` files from a vault directory; no semantic/vector search. Full implementation in Phase 8.
+> - **Real tokenization** — provider-specific byte-exact token counts deferred to Phase 7 (session-store integration).
 
 ---
 
