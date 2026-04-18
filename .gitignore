@@ -1,0 +1,56 @@
+# Build output
+/target/
+
+# Cargo lock is committed for binaries (cli/tui), kept for reproducibility
+# Cargo.lock  # do not ignore — workspace has binary crates
+
+# Editor and IDE
+.idea/
+.vscode/
+*.iml
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# Environment / secrets — never commit credentials
+.env
+.env.*
+*.key
+*.pem
+*.p12
+*.pfx
+
+# rustpi runtime data — local-only
+.rustpi/
+~/.config/rustpi/
+
+# Encrypted token store and key files produced by auth-core
+tokens.enc
+auth.key
+
+# Test artifacts written by event-log tests
+crates/event-log/test-artifacts/
+
+# Temporary files
+*.tmp
+*.bak
+*.orig
+
+# Coverage reports
+/tarpaulin-report.html
+lcov.info
+/coverage/
+
+# Profiling
+perf.data
+perf.data.old
+flamegraph.svg
+*.prof
+
+# Benchmark output
+criterion/
+
+# Generated docs (use `cargo doc` locally, not committed)
+/doc/
