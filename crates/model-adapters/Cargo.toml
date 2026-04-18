@@ -1,0 +1,17 @@
+[package]
+name = "model-adapters"
+version = "0.1.0"
+edition = "2021"
+description = "Provider abstraction trait and per-provider adapter implementations"
+
+[dependencies]
+agent-core = { path = "../agent-core" }
+auth-core = { path = "../auth-core" }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true }
+tokio-stream = { workspace = true }
+tracing = { workspace = true }
+async-trait = { workspace = true }
+futures = { workspace = true }

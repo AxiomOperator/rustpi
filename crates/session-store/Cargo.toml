@@ -1,0 +1,15 @@
+[package]
+name = "session-store"
+version = "0.1.0"
+edition = "2021"
+description = "Persistent session/run/event storage with pluggable backends (SQLite, sled, PostgreSQL)"
+
+[dependencies]
+agent-core = { path = "../agent-core" }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true }
+tracing = { workspace = true }
+async-trait = { workspace = true }
+chrono = { workspace = true }

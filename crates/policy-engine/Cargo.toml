@@ -1,0 +1,13 @@
+[package]
+name = "policy-engine"
+version = "0.1.0"
+edition = "2021"
+description = "Policy evaluation: tool allow/deny rules, file mutation policy, provider selection guardrails"
+
+[dependencies]
+agent-core = { path = "../agent-core" }
+glob = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }

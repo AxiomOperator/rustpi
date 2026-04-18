@@ -1,0 +1,58 @@
+[workspace]
+members = [
+    "crates/agent-core",
+    "crates/auth-core",
+    "crates/cli",
+    "crates/config-core",
+    "crates/context-engine",
+    "crates/event-log",
+    "crates/memory-sync",
+    "crates/model-adapters",
+    "crates/policy-engine",
+    "crates/rpc-api",
+    "crates/session-store",
+    "crates/tool-runtime",
+    "crates/tui",
+]
+resolver = "2"
+
+[workspace.dependencies]
+# Glob pattern matching
+glob = "0.3"
+
+# Async runtime
+tokio = { version = "1", features = ["full"] }
+tokio-stream = "0.1"
+
+# Serialization
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+toml = "0.8"
+
+# IDs
+uuid = { version = "1", features = ["v4", "serde"] }
+
+# Error handling
+thiserror = "2"
+anyhow = "1"
+
+# Logging/tracing
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
+
+# Time
+chrono = { version = "0.4", features = ["serde"] }
+
+# Cancellation
+tokio-util = { version = "0.7", features = ["rt"] }
+
+# Async traits
+async-trait = "0.1"
+
+# Futures
+futures = "0.3"
+
+[profile.release]
+lto = true
+codegen-units = 1
+strip = true

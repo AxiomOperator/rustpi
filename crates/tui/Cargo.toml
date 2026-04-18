@@ -1,0 +1,20 @@
+[package]
+name = "tui"
+version = "0.1.0"
+edition = "2021"
+description = "Ratatui-based interactive TUI for the agent runtime"
+
+[[bin]]
+name = "rustpi-tui"
+path = "src/main.rs"
+
+[dependencies]
+agent-core = { path = "../agent-core" }
+config-core = { path = "../config-core" }
+rpc-api = { path = "../rpc-api" }
+serde = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+anyhow = { workspace = true }

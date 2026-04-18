@@ -1,0 +1,14 @@
+[package]
+name = "tool-runtime"
+version = "0.1.0"
+edition = "2021"
+description = "Safe, auditable tool execution: subprocess runner, file tools, approval hooks, timeouts"
+
+[dependencies]
+agent-core = { path = "../agent-core" }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true }
+tracing = { workspace = true }
+async-trait = { workspace = true }

@@ -1,0 +1,15 @@
+use thiserror::Error;
+
+#[derive(Debug, Error)]
+pub enum MemorySyncError {
+    #[error("vault not found at path: {0}")]
+    VaultNotFound(String),
+    #[error("document '{0}' is read-only")]
+    ReadOnly(String),
+    #[error("sync conflict on document '{doc}': {reason}")]
+    Conflict { doc: String, reason: String },
+    #[error("malformed markdown in '{0}'")]
+    MalformedMarkdown(String),
+    #[error(transparent)]
+    Io(#[from] std::io::Error),
+}

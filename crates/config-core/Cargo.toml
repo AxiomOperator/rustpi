@@ -1,0 +1,13 @@
+[package]
+name = "config-core"
+version = "0.1.0"
+edition = "2021"
+description = "Layered configuration system: global < project < user < provider < memory < interface"
+
+[dependencies]
+agent-core = { path = "../agent-core" }
+serde = { workspace = true }
+serde_json = { workspace = true }
+toml = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }

@@ -1,0 +1,3 @@
+[tui]
+theme = "dracula"
+show_token_count = false

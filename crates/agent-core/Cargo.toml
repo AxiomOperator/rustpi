@@ -1,0 +1,15 @@
+[package]
+name = "agent-core"
+version = "0.1.0"
+edition = "2021"
+description = "Core agent runtime: session/run state machine, event bus, prompt assembly, cancellation"
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+uuid = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true }
+tokio-util = { workspace = true }
+tracing = { workspace = true }
+chrono = { workspace = true }
