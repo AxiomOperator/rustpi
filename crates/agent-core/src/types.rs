@@ -232,13 +232,13 @@ pub enum AgentEvent {
     ToolStdout {
         run_id: RunId,
         call_id: String,
-        data: String,
+        line: String,
         timestamp: DateTime<Utc>,
     },
     ToolStderr {
         run_id: RunId,
         call_id: String,
-        data: String,
+        line: String,
         timestamp: DateTime<Utc>,
     },
     ToolExecutionCompleted {
@@ -322,6 +322,39 @@ pub enum AgentEvent {
     /// Auth state was cleared for a provider.
     AuthStateCleared {
         provider: ProviderId,
+        timestamp: DateTime<Utc>,
+    },
+
+    // --- Tool lifecycle (fine-grained) ---
+    /// Tool execution has started.
+    ToolStarted {
+        run_id: RunId,
+        call_id: String,
+        tool_name: String,
+        timestamp: DateTime<Utc>,
+    },
+    /// Tool execution completed successfully.
+    ToolCompleted {
+        run_id: RunId,
+        call_id: String,
+        tool_name: String,
+        /// Exit code for subprocess tools; None for pure-Rust tools.
+        exit_code: Option<i32>,
+        timestamp: DateTime<Utc>,
+    },
+    /// Tool execution was cancelled before completion.
+    ToolCancelled {
+        run_id: RunId,
+        call_id: String,
+        tool_name: String,
+        timestamp: DateTime<Utc>,
+    },
+    /// Tool execution failed.
+    ToolFailed {
+        run_id: RunId,
+        call_id: String,
+        tool_name: String,
+        reason: String,
         timestamp: DateTime<Utc>,
     },
 

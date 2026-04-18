@@ -13,9 +13,15 @@
 //!
 //! Phase 0 stub — subprocess execution and file tools deferred to Phase 5.
 
+pub mod approval;
 pub mod error;
+pub mod path_safety;
 pub mod registry;
 pub mod runner;
+pub mod schema;
+pub mod subprocess;
+pub mod tools;
 
 pub use agent_core::types::{ToolCall, ToolResult};
 pub use error::ToolError;
+pub use tools::shell::ShellTool;

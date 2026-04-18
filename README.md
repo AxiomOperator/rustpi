@@ -2,7 +2,7 @@
 
 A native Rust AI agent platform with multi-provider model access, durable sessions, Obsidian-backed local-first memory, and a rich terminal UI.
 
-**Status: Phases 0–4 complete — provider integrations live**
+**Status: Phases 0–5 complete — tool runtime live**
 
 ---
 
@@ -49,7 +49,7 @@ session-store   event-log    config-core
 | `event-log` | Append-only JSONL event log, replay reader, audit records | ✅ Phase 2 |
 | `auth-core` | OAuth browser flow, RFC 8628 device flow, API key path, AES-256-GCM token store, refresh | ✅ Phase 3 |
 | `model-adapters` | `ModelProvider` trait, provider registry; OpenAI-compatible, llama.cpp, vLLM, and GitHub Copilot adapters | ✅ Phase 4 |
-| `tool-runtime` | Tool trait, registry, subprocess runner with timeout | 🔧 Phase 5 |
+| `tool-runtime` | Tool trait, registry, subprocess runner with timeout | ✅ Phase 5 |
 | `context-engine` | Context window assembly, ignore rules, token budgeting | 🔧 Phase 6 |
 | `session-store` | Durable session persistence (SQLite / sled / in-memory) | 🔧 Phase 7 |
 | `memory-sync` | Obsidian vault integration, vector memory sync | 🔧 Phase 8 |
@@ -134,6 +134,106 @@ Tokens are persisted encrypted at rest (AES-256-GCM) in `~/.config/rustpi/tokens
 
 ---
 
+## Tool Runtime
+
+The `crates/tool-runtime` crate provides a unified, safe, observable, policy-gated tool execution engine.
+
+### Supported Tool Categories
+
+| Tool | Name | Sensitivity | Streaming | Timeout | Cancellation | Approval Required |
+|------|------|-------------|-----------|---------|--------------|-------------------|
+| Shell command | `shell` | Critical | Yes | Yes | Yes | Always |
+| Read file | `read_file` | Safe | No | Yes | Yes | No |
+| Write file | `write_file` | High | No | Yes | Yes | Configurable |
+| Text search | `search` | Safe | No | Yes | Yes | No |
+| File edit | `edit_file` | High | No | Yes | Yes | Configurable |
+
+### Lifecycle Events
+
+Every tool execution emits these `AgentEvent` variants in order:
+
+1. `ToolStarted` — tool name + invocation ID
+2. `ToolStdout` / `ToolStderr` — incremental output lines (subprocess only)
+3. `ToolCompleted` — success + optional exit code
+4. `ToolCancelled` — if cancelled mid-run
+5. `ToolFailed` — with reason string
+
+### Timeout & Cancellation
+
+- Default timeout: 30 seconds (configurable per invocation via `ToolConfig`)
+- Cancellation via `tokio_util::sync::CancellationToken` — pass in `ToolConfig`
+- Both timeout and cancellation emit the correct lifecycle event and return an error
+
+### Approval Hooks
+
+Built-in approval hook implementations:
+
+- `AutoApprove` — approves all (use for tests/dev)
+- `DenyAbove { threshold }` — denies tools at or above a sensitivity level
+- `AllowList` — approves only named tools
+
+Implement the `ApprovalHook` trait for custom policy.
+
+### Path Safety
+
+File and search/edit tools enforce path safety via `PathSafetyPolicy`:
+
+- All paths are validated against configured allowed roots
+- `..` traversal is blocked
+- Explicit deny list supported
+- Paths outside allowed roots → `ToolError::PathTraversal`
+
+```rust
+let policy = PathSafetyPolicy::new(["/workspace", "/tmp/scratch"]);
+```
+
+### Subprocess Streaming
+
+The shell tool streams stdout/stderr as `ToolStdout`/`ToolStderr` events while the process runs. Output is capped at 512 KB per stream.
+
+### Configuration Example
+
+```rust
+use tool_runtime::{
+    runner::ToolRunner,
+    approval::DenyAbove,
+    schema::{ToolConfig, ToolSensitivity},
+    tools::{shell::ShellTool, file::{ReadFileTool, WriteFileTool}},
+    path_safety::PathSafetyPolicy,
+};
+use std::sync::Arc;
+use std::time::Duration;
+
+// Deny Critical tools (shell) by default
+let approval = Arc::new(DenyAbove { threshold: ToolSensitivity::High });
+
+// Build runner with event bus
+let (event_tx, _event_rx) = tokio::sync::broadcast::channel(64);
+let runner = ToolRunner::new(registry, Duration::from_secs(30))
+    .with_approval(approval)
+    .with_event_tx(event_tx);
+
+// Register tools
+let policy = Arc::new(PathSafetyPolicy::new(["/workspace"]));
+runner.register(Arc::new(ReadFileTool::new(policy.clone())));
+runner.register(Arc::new(WriteFileTool::new(policy.clone())));
+```
+
+### Testing the Tool Runtime
+
+```bash
+# Run all tool-runtime tests
+cargo test -p tool-runtime
+
+# Run only integration tests
+cargo test -p tool-runtime --test tool_runtime_integration
+
+# Run with output for debugging
+cargo test -p tool-runtime -- --nocapture
+```
+
+---
+
 ## Policy model
 
 All runtime actions pass through the `policy-engine` crate before execution. Rules are evaluated in order with first-match-wins semantics:
@@ -178,7 +278,7 @@ The log is the source of truth for session state and supports full replay for de
 | 2 | Config, policy, and event logging | ✅ Complete |
 | 3 | Model adapter abstraction and auth core | ✅ Complete |
 | 4 | First provider integrations | ✅ Complete |
-| 5 | Tool runtime MVP | 🔲 Planned |
+| 5 | Tool runtime MVP | ✅ Complete |
 | 6 | Context engine MVP | 🔲 Planned |
 | 7 | Session stores and durable memory backends | 🔲 Planned |
 | 8 | Obsidian vault memory and personality system | 🔲 Planned |

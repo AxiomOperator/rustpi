@@ -355,43 +355,65 @@ Stand up safe, observable tool execution.
 
 ### Deliverables
 
-* [ ] subprocess tool runner
-* [ ] file tool set
-* [ ] search/edit tool set
-* [ ] timeout/cancellation enforcement
-* [ ] tool event emission
+* [x] subprocess tool runner
+* [x] file tool set (read_file, write_file)
+* [x] search/edit tool set (search, edit_file)
+* [x] timeout enforcement
+* [x] cancellation enforcement
+* [x] approval hooks for sensitive tools
+* [x] tool lifecycle events: started, stdout, stderr, completed, cancelled, failed
 
 ### Tasks
 
-* [ ] Implement tool schema model
-* [ ] Implement subprocess execution
-* [ ] Implement stdout/stderr streaming capture
-* [ ] Implement file read/write tools
-* [ ] Implement search/edit tools
-* [ ] Implement timeout enforcement
-* [ ] Implement cancellation enforcement
-* [ ] Implement approval hooks for sensitive tools
-* [ ] Emit tool lifecycle events:
+* [x] Implement tool schema model (`ToolSensitivity`, `ToolConfig`, `ToolSchema`)
+* [x] Implement subprocess execution (`SubprocessExecutor` with streaming)
+* [x] Implement stdout/stderr streaming capture
+* [x] Implement file read/write tools
+* [x] Implement search/edit tools
+* [x] Implement timeout enforcement
+* [x] Implement cancellation enforcement
+* [x] Implement approval hooks for sensitive tools
+* [x] Emit tool lifecycle events:
 
-  * [ ] started
-  * [ ] stdout
-  * [ ] stderr
-  * [ ] completed
-  * [ ] cancelled
-  * [ ] failed
-* [ ] Add tests for:
+  * [x] started
+  * [x] stdout
+  * [x] stderr
+  * [x] completed
+  * [x] cancelled
+  * [x] failed
+* [x] Add tests for:
 
-  * [ ] timeout
-  * [ ] cancellation
-  * [ ] non-zero exit handling
-  * [ ] unsafe path denial
+  * [x] timeout
+  * [x] cancellation
+  * [x] non-zero exit handling
+  * [x] unsafe path denial
 
 ### Exit criteria
 
-* [ ] Tools execute through a unified runtime
-* [ ] Sensitive actions can be gated
-* [ ] Timeouts and cancellation are reliable
-* [ ] Tool outputs are observable and auditable
+* [x] Tools execute through a unified runtime
+* [x] Sensitive actions can be gated
+* [x] Timeouts and cancellation are reliable
+* [x] Tool outputs are observable and auditable
+
+### Architecture notes
+
+The `tool-runtime` crate implements a unified runner (`ToolRunner`) that all tool calls flow through:
+
+1. **Tool schema model** — `ToolSensitivity` (Safe / Low / High / Critical), `ToolConfig` (per-invocation timeout + cancellation token), and `ToolSchema` (name, description, JSON Schema params, sensitivity).
+2. **Approval hooks** — `ApprovalHook` trait checked before any `High`/`Critical` tool runs. Built-in implementations: `AutoApprove` (tests/dev), `DenyAbove { threshold }` (deny at or above a sensitivity level), `AllowList` (named-tool whitelist).
+3. **Path safety** — `PathSafetyPolicy` validates every file path against a configured set of allowed roots. `..` traversal is blocked; an explicit deny list is checked first. Violations return `ToolError::PathTraversal`.
+4. **Event model** — `ToolRunner` emits `AgentEvent` variants on a `broadcast::Sender` in order: `ToolStarted` → `ToolStdout`/`ToolStderr` (subprocess only) → `ToolCompleted` | `ToolCancelled` | `ToolFailed`.
+5. **Subprocess executor** — `run_subprocess` in `crates/tool-runtime/src/subprocess.rs` spawns via `tokio::process::Command`, streams stdout/stderr line-by-line as events, enforces a wall-clock timeout, and honours a `CancellationToken`. Output is capped at 512 KB per stream.
+
+### Known limitations and deferred work
+
+* `ShellTool` requires `AutoApprove` for tests; production use needs a real approval UI/hook.
+* Search depth is limited to 5 directory levels.
+* No glob pattern search — regex only.
+* Output capped at 512 KB per stream (stdout/stderr); lines beyond this cap are dropped.
+* Cancellation of synchronous file operations is at boundary level only (not mid-write).
+* No tool output persistence/replay yet (deferred to Phase 12).
+* `ShellTool` spawns via `/bin/sh -c` — shell injection risk if callers pass untrusted input without sanitisation.
 
 ---
 
@@ -781,7 +803,7 @@ Target phases:
 * [x] Phase 2
 * [x] Phase 3
 * [ ] Phase 4
-* [ ] Phase 5
+* [x] Phase 5
 * [ ] Phase 6
 * [ ] Phase 7
 * [ ] Phase 9

@@ -1,7 +1,6 @@
 //! OAuth 2.0 authorization code flow with optional PKCE.
 
 use chrono::Utc;
-use rand::RngCore;
 use serde::{Deserialize, Serialize};
 
 use crate::error::AuthError;
@@ -58,8 +57,7 @@ impl OAuthFlow {
     /// Returns the pending state (including the URL to visit).
     pub fn begin(&self) -> Result<OAuthPendingState, AuthError> {
         // 16-byte random state → 32 hex chars
-        let mut bytes = [0u8; 16];
-        rand::thread_rng().fill_bytes(&mut bytes);
+        let bytes: [u8; 16] = rand::random();
         let state_token: String = bytes.iter().map(|b| format!("{b:02x}")).collect();
 
         let scope = self.config.scopes.join(" ");
