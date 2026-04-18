@@ -2,7 +2,7 @@
 
 A native Rust AI agent platform with multi-provider model access, durable sessions, Obsidian-backed local-first memory, and a rich terminal UI.
 
-**Status: Phases 0–7 complete — session stores and durable memory live**
+**Status: Phases 0–8 complete — vault memory and personality system live**
 
 ---
 
@@ -52,7 +52,7 @@ session-store   event-log    config-core
 | `tool-runtime` | Tool trait, registry, subprocess runner with timeout | ✅ Phase 5 |
 | `context-engine` | Context window assembly, ignore rules, token budgeting | ✅ Phase 6 |
 | `session-store` | Durable session persistence (SQLite / sled / PostgreSQL); 4 store traits + config-driven factory | ✅ Phase 7 |
-| `memory-sync` | Qdrant semantic memory (`QdrantMemory`); Obsidian vault integration (Phase 8) | ✅ Phase 7 |
+| `memory-sync` | Qdrant semantic memory (`QdrantMemory`); Obsidian vault reader/writer, canonical docs, personality loader, sync engine | ✅ Phase 8 |
 | `rpc-api` | JSONL RPC protocol types and codec | 🔧 Phase 9 |
 | `cli` | Scriptable CLI binary (`rustpi`) | 🔧 Phase 10 |
 | `tui` | Ratatui full-screen TUI binary (`rustpi-tui`) | 🔧 Phase 11 |
@@ -309,6 +309,101 @@ DATABASE_URL=postgres://... cargo test -p session-store -- --ignored
 
 ---
 
+## Vault Memory & Personality
+
+The `crates/memory-sync` crate implements an Obsidian-style Markdown vault as the human-readable memory layer — a directory of plain `.md` files the operator can read and edit directly. The runtime reads personality from it, writes operational state back into it, and preserves every human-authored note.
+
+### Overview
+
+The vault provides two things:
+
+- **Personality** — Soul, Identity, Agents, Boot, and User docs are loaded on startup and injected into the system prompt.
+- **Operational state** — Heartbeat and Tools docs are updated by the runtime after each run to reflect current status.
+
+Human-authored sections are **never** overwritten. Only sections explicitly tagged `<!-- machine-managed -->` may be updated by the runtime.
+
+### Configuration
+
+```toml
+[memory]
+obsidian_vault_path = "/path/to/your/vault"
+```
+
+The vault must be an existing directory. `VaultAccessor::open()` returns an error if the path is absent or is not a directory.
+
+### Canonical Documents
+
+| Document | Purpose | Runtime Policy | In Prompt |
+|----------|---------|----------------|-----------|
+| `SOUL.md` | Core rules, ethics, non-negotiables | Read-only | ✅ (priority 0) |
+| `IDENTITY.md` | Agent identity, role, tone | Read-only | ✅ (priority 1) |
+| `AGENTS.md` | Operating instructions, behavioral conventions | Read-only | ✅ (priority 2) |
+| `BOOT.md` | Boot-time essentials | Read-only | ✅ (priority 3) |
+| `BOOTSTRAP.md` | Deep initialization guidance | Read-only | ❌ |
+| `HEARTBEAT.md` | Current status, operational state | Runtime-writable | ❌ |
+| `TOOLS.md` | Tool inventory and constraints | Runtime-writable | ❌ |
+| `USER.md` | User preferences and communication style | Approval-required | ✅ (priority 4) |
+
+### Markdown Schema
+
+Every vault document follows a simple schema:
+
+- **Frontmatter** — optional YAML key/value pairs between `---` delimiters at the top of the file.
+- **Sections** — `#` headings split the document into named sections. Each section owns the content lines below its heading until the next heading.
+- **Machine-managed marker** — a `<!-- machine-managed -->` comment on the first line of a section's body marks that section as runtime-owned. The runtime may update it freely.
+- **Human-authored sections** — all sections without the marker are preserved unconditionally; `upsert_machine_section()` will never touch them.
+
+### Memory Sync
+
+`SyncEngine` drives three operations:
+
+- `sync_to_vault()` — pushes current runtime state into the `<!-- machine-managed -->` sections of `HEARTBEAT.md` and `TOOLS.md`.
+- `index_vault()` — scans all vault documents and builds an in-memory index for retrieval.
+- `detect_conflicts()` — inspects machine-managed sections for manual edits since the last sync; records a `RequiresReview` conflict when both the runtime and a human have changed the same section.
+
+### Conflict Resolution
+
+| Situation | Behaviour |
+|-----------|-----------|
+| Section marked `<!-- machine-managed -->` | Runtime may overwrite freely |
+| Section without marker (human-authored) | Always preserved; never overwritten |
+| Machine-managed section manually edited | `detect_conflicts()` records a `RequiresReview` conflict |
+
+### Personality Loading
+
+`load_personality()` assembles a token-bounded personality string from the prompt-included docs in priority order:
+
+1. **Soul** (priority 0)
+2. **Identity** (priority 1)
+3. **Agents** (priority 2)
+4. **User** (priority 3)
+5. **Boot** (priority 4)
+
+- Default token budget: **4,000 tokens** (shared across all personality docs).
+- Docs that do not exist are silently skipped and listed in `PersonalityBundle::missing_docs`.
+- `inject_personality()` adds the assembled text as a System section to `PromptAssembler`.
+
+### Vault Initialization
+
+On first use, `init_defaults()` creates minimal template files for any missing canonical docs:
+
+```rust
+let vault = VaultAccessor::open("/path/to/vault")?;
+let created = vault.init_defaults()?;
+// created: list of CanonicalDoc variants that were written
+```
+
+This is called automatically by the runtime — no manual setup step is required.
+
+### Testing
+
+```bash
+cargo test -p memory-sync
+cargo test --workspace
+```
+
+---
+
 ## Context Engine
 
 The `crates/context-engine` crate assembles a token-bounded, relevance-ranked prompt context from the working directory, applying ignore rules, scoring heuristics, working-set selection, memory retrieval, and compaction.
@@ -518,7 +613,7 @@ The log is the source of truth for session state and supports full replay for de
 | 5 | Tool runtime MVP | ✅ Complete |
 | 6 | Context engine MVP | ✅ Complete |
 | 7 | Session stores and durable memory backends | ✅ Complete |
-| 8 | Obsidian vault memory and personality system | 🔲 Planned |
+| 8 | Obsidian vault memory and personality system | ✅ Complete |
 | 9 | RPC API | 🔲 Planned |
 | 10 | CLI | 🔲 Planned |
 | 11 | Ratatui TUI | 🔲 Planned |

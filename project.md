@@ -591,48 +591,95 @@ Implement the human-readable memory layer and personality documents.
 
 ### Deliverables
 
-* [ ] Obsidian vault integration
-* [ ] Markdown memory schema
-* [ ] personality document loader
-* [ ] sync rules between runtime memory and vault memory
+* [x] Obsidian vault integration
+* [x] Markdown memory schema
+* [x] personality document loader
+* [x] sync rules between runtime memory and vault memory
 
 ### Tasks
 
-* [ ] Implement vault path configuration
-* [ ] Implement Markdown memory reader/writer
-* [ ] Implement canonical docs:
+* [x] Implement vault path configuration
+* [x] Implement Markdown memory reader/writer
+* [x] Implement canonical docs:
 
-  * [ ] `AGENTS.md`
-  * [ ] `BOOT.md`
-  * [ ] `BOOTSTRAP.md`
-  * [ ] `HEARTBEAT.md`
-  * [ ] `IDENTITY.md`
-  * [ ] `SOUL.md`
-  * [ ] `TOOLS.md`
-  * [ ] `USER.md`
-* [ ] Define which docs are:
+  * [x] `AGENTS.md`
+  * [x] `BOOT.md`
+  * [x] `BOOTSTRAP.md`
+  * [x] `HEARTBEAT.md`
+  * [x] `IDENTITY.md`
+  * [x] `SOUL.md`
+  * [x] `TOOLS.md`
+  * [x] `USER.md`
+* [x] Define which docs are:
 
-  * [ ] read-only at runtime
-  * [ ] writable by runtime
-  * [ ] writable only by approval
-* [ ] Implement `memory-sync`
+  * [x] read-only at runtime
+  * [x] writable by runtime
+  * [x] writable only by approval
+* [x] Implement `memory-sync`
 
-  * [ ] structured store → vault sync
-  * [ ] vault → retrieval index sync
-  * [ ] conflict rules
-* [ ] Implement personality loading into prompt assembly
-* [ ] Add tests for:
+  * [x] structured store → vault sync
+  * [x] vault → retrieval index sync
+  * [x] conflict rules
+* [x] Implement personality loading into prompt assembly
+* [x] Add tests for:
 
-  * [ ] malformed markdown
-  * [ ] sync conflicts
-  * [ ] duplicate note handling
-  * [ ] prompt assembly from personality docs
+  * [x] malformed markdown
+  * [x] sync conflicts
+  * [x] duplicate note handling
+  * [x] prompt assembly from personality docs
 
 ### Exit criteria
 
-* [ ] The agent can load personality and long-term memory from the vault
-* [ ] Runtime memory and vault memory can synchronize safely
-* [ ] Human-readable memory is stable and inspectable
+* [x] The agent can load personality and long-term memory from the vault
+* [x] Runtime memory and vault memory can synchronize safely
+* [x] Human-readable memory is stable and inspectable
+
+> **Phase 8 completed.** 34 unit tests pass (`cargo test -p memory-sync`).
+>
+> **Implemented in `crates/memory-sync/src/`:**
+> - `markdown.rs` — `VaultDoc` line-by-line Markdown parser; frontmatter between `---` delimiters; `#` headings split document into named `Section`s; `<!-- machine-managed -->` comment marks sections the runtime owns; `upsert_machine_section()` inserts or replaces only machine-managed sections — human-authored sections are unconditionally preserved; `render()` re-serialises to a canonical string
+> - `docs.rs` — `CanonicalDoc` enum for all 8 canonical docs (Agents, Boot, Bootstrap, Heartbeat, Identity, Soul, Tools, User); `filename()`, `mutability()`, `included_in_prompt()`, `prompt_priority()`, `default_template()`; `load_doc()` and `load_all_docs()` (missing docs return `Ok(None)`, silently skipped in batch load)
+> - `vault.rs` — `VaultAccessor` with `open()` (validates path exists and is a directory), `read_doc()`, `write_doc()` (enforces ReadOnly → error, ApprovalRequired → error, RuntimeWritable → write), `write_doc_approved()` (bypasses approval check after external grant — ReadOnly still blocked), `update_machine_sections()` (upserts named machine-managed sections, creates file from default template if absent), `read_file()` / `list_files()`, `init_defaults()`; path traversal protection via `check_no_traversal()` (rejects any `..` component)
+> - `personality.rs` — `PersonalityBundle` with `content`, `token_count`, `loaded_docs`, `missing_docs`; `load_personality()` reads prompt-included docs in priority order (Soul → Identity → Agents → User → Boot), truncates to a token budget (default 4,000 tokens), concatenates with section separators; `inject_personality()` pushes the result as a System section into `PromptAssembler`
+> - `sync.rs` — `SyncEngine`: `sync_to_vault()` writes HEARTBEAT and TOOLS machine-managed sections from runtime state; `index_vault()` scans all vault docs and builds an in-memory index (`Vec<IndexedDoc>`); `detect_conflicts()` compares machine-managed section checksums to detect manual edits, records `ConflictRecord { doc, section, kind: RequiresReview }` for any mismatch
+> - `error.rs` — `MemorySyncError` extended with `ApprovalRequired(String)`, `PathTraversal(String)`, and `Init(String)` variants
+>
+> ### Architecture notes
+>
+> **Five new modules and their responsibilities:**
+>
+> | Module | Responsibility |
+> |--------|----------------|
+> | `markdown.rs` | Parse and render vault `.md` files; enforce machine-managed vs human-authored boundary |
+> | `docs.rs` | Type-safe canonical doc enum; write policies; default templates |
+> | `vault.rs` | File I/O with path-safety; policy enforcement per `DocMutability` |
+> | `personality.rs` | Token-bounded personality assembly; prompt injection |
+> | `sync.rs` | Runtime-state → vault push; vault index; conflict detection |
+>
+> **Canonical doc write policies:**
+> - `ReadOnly` — SOUL, IDENTITY, AGENTS, BOOT, BOOTSTRAP: runtime never writes these; only the operator edits them.
+> - `RuntimeWritable` — HEARTBEAT, TOOLS: runtime may update without approval.
+> - `ApprovalRequired` — USER: runtime must call `write_doc_approved()` after explicit user consent.
+>
+> **Sync pipeline:**
+> ```
+> sync_to_vault()  →  upsert machine sections in HEARTBEAT.md + TOOLS.md
+> index_vault()    →  scan all .md files → Vec<IndexedDoc> (for retrieval)
+> detect_conflicts() →  checksum machine sections → Vec<ConflictRecord>
+> ```
+>
+> **Personality loading order (highest priority first):**
+> Soul (0) → Identity (1) → Agents (2) → User (3) → Boot (4)
+> Missing docs are silently skipped. Token budget defaults to 4,000 tokens shared across all docs.
+>
+> **Machine-managed vs human-authored:**
+> A `<!-- machine-managed -->` comment on the first line of a section body marks it as runtime-owned. All other sections are human-authored and are never overwritten by any vault API.
+>
+> ### Deferred work
+>
+> - **Rich conflict UI** — `detect_conflicts()` records conflicts but does not yet present a diff or merge UI to the operator; this is deferred to Phase 11 (TUI).
+> - **Semantic dedup of vault notes** — `index_vault()` scans all docs but does not deduplicate semantically similar notes; deferred to Phase 9.
+> - **Embedding-based retrieval from vault** — `VaultMemory` in `context-engine` currently reads raw Markdown with no vector search; ANN retrieval from vault content deferred to Phase 9 (requires embedding model integration).
 
 ---
 
@@ -905,7 +952,7 @@ Outcome:
 
 Target phases:
 
-* [ ] Phase 8
+* [x] Phase 8
 * [ ] Phase 12
 * [ ] Phase 13
 
@@ -939,7 +986,7 @@ These are the dependencies that will govern the schedule:
 * [ ] Phase 3 before Phase 4
 * [ ] Phase 4 before meaningful end-to-end testing
 * [x] Phase 7 before mature memory layering
-* [ ] Phase 8 depends on Phase 6 and 7
+* [x] Phase 8 depends on Phase 6 and 7
 * [ ] Phase 11 depends on Phase 9 and core runtime stability
 * [ ] Phase 14 depends on all major implementation phases
 
