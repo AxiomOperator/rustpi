@@ -48,11 +48,16 @@ name = "agent-core"
 version = "0.1.0"
 dependencies = [
  "chrono",
+ "context-engine",
+ "regex",
  "serde",
  "serde_json",
+ "session-store",
+ "tempfile",
  "thiserror 2.0.18",
  "tokio",
  "tokio-util",
+ "tool-runtime",
  "tracing",
  "uuid",
 ]
@@ -213,6 +218,7 @@ dependencies = [
  "tokio",
  "tokio-util",
  "tracing",
+ "wiremock",
 ]
 
 [[package]]

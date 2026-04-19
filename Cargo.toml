@@ -18,6 +18,9 @@ members = [
 resolver = "2"
 
 [workspace.dependencies]
+# Regex
+regex = "1"
+
 # Glob pattern matching
 glob = "0.3"
 

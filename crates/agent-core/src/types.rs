@@ -427,3 +427,50 @@ pub enum AgentEvent {
         timestamp: DateTime<Utc>,
     },
 }
+
+#[cfg(test)]
+mod security_tests {
+    use super::*;
+    use chrono::Utc;
+
+    /// `AgentEvent::TokenStored` must not expose raw token values —
+    /// it only carries provider id and a timestamp.
+    #[test]
+    fn token_stored_event_has_no_raw_token() {
+        let event = AgentEvent::TokenStored {
+            provider: ProviderId::new("openai"),
+            timestamp: Utc::now(),
+        };
+        let json = serde_json::to_string(&event).unwrap();
+        assert!(
+            !json.contains("access_token"),
+            "TokenStored must not contain access_token field: {json}"
+        );
+        assert!(
+            !json.contains("token_value"),
+            "TokenStored must not contain token_value field: {json}"
+        );
+        // Provider identity must be present for audit purposes
+        assert!(json.contains("openai"), "TokenStored must record the provider: {json}");
+    }
+
+    /// `AgentEvent::ApprovalDenied` must not carry token, secret, or password fields.
+    #[test]
+    fn approval_denied_event_has_no_secret_fields() {
+        let event = AgentEvent::ApprovalDenied {
+            run_id: RunId::new(),
+            tool_name: "shell".into(),
+            sensitivity: "critical".into(),
+            reason: "requires explicit approval".into(),
+            timestamp: Utc::now(),
+        };
+        let json = serde_json::to_string(&event).unwrap();
+        // The serialized event must not have fields that could leak credentials
+        assert!(!json.contains("\"token\""), "ApprovalDenied must not contain token field: {json}");
+        assert!(!json.contains("\"secret\""), "ApprovalDenied must not contain secret field: {json}");
+        assert!(!json.contains("\"password\""), "ApprovalDenied must not contain password field: {json}");
+        // Expected audit fields must be present
+        assert!(json.contains("tool_name"), "ApprovalDenied must have tool_name: {json}");
+        assert!(json.contains("reason"), "ApprovalDenied must have reason: {json}");
+    }
+}

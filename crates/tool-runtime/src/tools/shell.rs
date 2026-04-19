@@ -104,6 +104,7 @@ impl crate::registry::Tool for ShellTool {
             event_tx: self.event_tx.clone(),
             run_id: None,
             call_id: Some(call.id.clone()),
+            redactor: None,
         })
         .await
         .map_err(ToolError::Io)?;

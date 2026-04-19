@@ -489,3 +489,167 @@ async fn sync_to_vault_on_empty_vault_creates_docs() {
     assert!(dir.path().join("HEARTBEAT.md").exists());
     assert!(dir.path().join("TOOLS.md").exists());
 }
+
+// ─── 11. Vault sync matrix ────────────────────────────────────────────────────
+
+/// Writing the same machine-managed section twice must not duplicate content.
+#[tokio::test]
+async fn duplicate_note_upsert_is_idempotent() {
+    let dir = tempfile::TempDir::new().unwrap();
+    let engine = SyncEngine::new(VaultAccessor::open(dir.path()).unwrap());
+
+    // Sync twice with identical arguments.
+    engine.sync_to_vault("running", &["bash"]).await.unwrap();
+    engine.sync_to_vault("running", &["bash"]).await.unwrap();
+
+    // The HEARTBEAT.md file should have exactly one machine-managed section —
+    // no duplicate headings or tags.
+    let content = read_file(&dir, "HEARTBEAT.md");
+    let machine_tag_count = content.matches("<!-- machine-managed -->").count();
+    assert_eq!(
+        machine_tag_count, 1,
+        "expected exactly one machine-managed tag after two identical syncs, got {machine_tag_count}"
+    );
+
+    // Verify TOOLS.md similarly has no duplication.
+    let tools_content = read_file(&dir, "TOOLS.md");
+    let tools_tag_count = tools_content.matches("<!-- machine-managed -->").count();
+    assert_eq!(
+        tools_tag_count, 1,
+        "TOOLS.md should have exactly one machine-managed tag, got {tools_tag_count}"
+    );
+}
+
+/// When a machine-managed section is manually edited (conflict), `sync_to_vault`
+/// overwrites that section with the new machine content and reports no errors.
+/// The `detect_conflicts` function flags the disagreement before the sync.
+#[tokio::test]
+async fn sync_conflict_resolution() {
+    let dir = tempfile::TempDir::new().unwrap();
+    let _vault = open(&dir);
+
+    // Establish initial state via sync.
+    let engine = SyncEngine::new(VaultAccessor::open(dir.path()).unwrap());
+    engine.sync_to_vault("idle", &[]).await.unwrap();
+
+    // Simulate a manual (conflicting) edit to the machine-managed section.
+    let manually_edited = "# Heartbeat\n<!-- machine-managed -->\nStatus: MANUALLY_OVERRIDDEN\n";
+    write_file(&dir, "HEARTBEAT.md", manually_edited);
+
+    // The engine expects "Status: idle" but file now has "MANUALLY_OVERRIDDEN" — conflict.
+    let pre_conflict = engine
+        .detect_conflicts(CanonicalDoc::Heartbeat, "Status: idle")
+        .unwrap();
+    assert!(
+        pre_conflict.is_some(),
+        "expected detect_conflicts to report a conflict: file has 'MANUALLY_OVERRIDDEN' but expected 'idle'"
+    );
+
+    // Sync resolves the conflict by overwriting the machine section.
+    let result = engine.sync_to_vault("resolved", &[]).await.unwrap();
+    assert!(
+        result.errors.is_empty(),
+        "sync_to_vault must succeed even when resolving a conflict: {:?}",
+        result.errors
+    );
+
+    // Post-sync: machine content must reflect the new sync, not the manual edit.
+    let post_content = read_file(&dir, "HEARTBEAT.md");
+    assert!(
+        post_content.contains("Status: resolved"),
+        "machine section was not overwritten: {post_content}"
+    );
+    assert!(
+        !post_content.contains("MANUALLY_OVERRIDDEN"),
+        "conflicting manual content must be replaced: {post_content}"
+    );
+    // The sync also injects a timestamp; verify it's present.
+    assert!(
+        post_content.contains("Last updated:"),
+        "sync output should contain 'Last updated:': {post_content}"
+    );
+}
+
+/// Reading a CanonicalDoc that has never been written returns `Ok(None)`.
+/// The VaultAccessor API treats a missing file as absent, not as an error.
+#[test]
+fn vault_read_nonexistent_canonical_doc_returns_none() {
+    let dir = tempfile::TempDir::new().unwrap();
+    let vault = open(&dir);
+
+    // None of the canonical docs have been written yet.
+    for &doc in CanonicalDoc::all() {
+        let result = vault.read_doc(doc);
+        assert!(
+            result.is_ok(),
+            "read_doc({}) returned Err for a missing file: {:?}",
+            doc.filename(),
+            result.err()
+        );
+        assert!(
+            result.unwrap().is_none(),
+            "read_doc({}) should return None for a missing file",
+            doc.filename()
+        );
+    }
+}
+
+// ─── 12. Corrupted / malformed vault notes ───────────────────────────────────
+
+/// Writing a file with invalid UTF-8 bytes and then calling `read_doc` must
+/// return an error without panicking.
+#[test]
+fn corrupted_frontmatter_utf8_boundary_handled() {
+    let dir = tempfile::TempDir::new().unwrap();
+    // Write raw bytes that are not valid UTF-8.
+    std::fs::write(dir.path().join("HEARTBEAT.md"), b"\xff\xfe bad bytes").unwrap();
+
+    let vault = VaultAccessor::open(dir.path()).unwrap();
+    let result = vault.read_doc(CanonicalDoc::Heartbeat);
+    assert!(
+        result.is_err(),
+        "read_doc on invalid UTF-8 must return an error, not Ok or panic"
+    );
+}
+
+/// A document consisting entirely of whitespace must parse without error and
+/// yield an empty (or whitespace-only) structure.
+#[test]
+fn note_with_only_whitespace_parses_cleanly() {
+    let doc = VaultDoc::parse("   \n\n  ")
+        .expect("whitespace-only content should parse without error");
+    // No meaningful sections — any sections present must have only whitespace content.
+    let has_content = doc.sections.iter().any(|s| !s.content.trim().is_empty());
+    assert!(
+        !has_content,
+        "whitespace-only doc should produce no meaningful section content"
+    );
+}
+
+/// `SyncEngine::index_vault` must skip malformed notes gracefully and continue
+/// indexing the valid ones — it must not abort the whole sync.
+#[tokio::test]
+async fn sync_engine_skips_malformed_notes_gracefully() {
+    let dir = tempfile::TempDir::new().unwrap();
+    // A valid note.
+    write_file(&dir, "VALID_NOTE.md", "# Valid\n\nGood content here.\n");
+    // A note with unclosed frontmatter — triggers `MalformedMarkdown`.
+    write_file(&dir, "BROKEN_NOTE.md", "---\nkey: value\n"); // no closing ---
+
+    let engine = SyncEngine::new(VaultAccessor::open(dir.path()).unwrap());
+    let result = engine.index_vault().await;
+
+    assert!(
+        result.is_ok(),
+        "index_vault must not fail when a note is malformed"
+    );
+    let indexed = result.unwrap();
+    assert!(
+        indexed.iter().any(|(name, _)| name.contains("VALID_NOTE")),
+        "valid note must be indexed"
+    );
+    assert!(
+        !indexed.iter().any(|(name, _)| name.contains("BROKEN_NOTE")),
+        "malformed note must be skipped silently"
+    );
+}

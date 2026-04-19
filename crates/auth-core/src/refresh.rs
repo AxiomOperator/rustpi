@@ -163,4 +163,64 @@ mod tests {
             "expired token with no refresh_token must yield NoRefreshToken"
         );
     }
+
+    // ── Failure mode: token expiry ───────────────────────────────────────────
+
+    /// An expired token with a refresh_token that is rejected by the server
+    /// must return `AuthError::RefreshFailed`, not panic.
+    #[tokio::test]
+    async fn token_expired_returns_error() {
+        let server = wiremock::MockServer::start().await;
+        wiremock::Mock::given(wiremock::matchers::method("POST"))
+            .respond_with(
+                wiremock::ResponseTemplate::new(400)
+                    .set_body_string(
+                        r#"{"error":"token_expired","error_description":"Access token has expired"}"#,
+                    )
+                    .insert_header("content-type", "application/json"),
+            )
+            .mount(&server)
+            .await;
+
+        let r = make_record(Some(Utc::now() - chrono::Duration::hours(1)));
+        // record has a refresh_token set by make_record, so the HTTP path is exercised.
+        let token_url = format!("{}/token", server.uri());
+        let result = refresh_token(&r, &token_url, "client-id", None).await;
+        assert!(
+            matches!(result, Err(AuthError::RefreshFailed(_))),
+            "expected RefreshFailed when server rejects expired token, got: {result:?}"
+        );
+    }
+
+    /// A near-expired token should trigger a refresh attempt; a successful
+    /// server response should return an updated `TokenRecord`.
+    #[tokio::test]
+    async fn token_near_expiry_triggers_refresh_attempt() {
+        let server = wiremock::MockServer::start().await;
+        wiremock::Mock::given(wiremock::matchers::method("POST"))
+            .respond_with(
+                wiremock::ResponseTemplate::new(200)
+                    .set_body_string(
+                        r#"{"access_token":"new-access-tok","refresh_token":"new-ref-tok","expires_in":3600}"#,
+                    )
+                    .insert_header("content-type", "application/json"),
+            )
+            .mount(&server)
+            .await;
+
+        let r = make_record(Some(Utc::now() + chrono::Duration::minutes(2)));
+        assert!(needs_refresh(&r), "near-expired token must need refresh");
+
+        let token_url = format!("{}/token", server.uri());
+        let new_record = refresh_token(&r, &token_url, "client-id", None)
+            .await
+            .expect("refresh should succeed against a cooperative server");
+
+        assert_eq!(new_record.access_token, "new-access-tok");
+        assert_eq!(
+            new_record.refresh_token.as_deref(),
+            Some("new-ref-tok"),
+            "provider-rotated refresh token must be stored"
+        );
+    }
 }

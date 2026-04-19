@@ -16,6 +16,12 @@ pub enum ToolError {
     SubprocessFailed { code: i32, stderr: String },
     #[error("path traversal attempt blocked: {0}")]
     PathTraversal(String),
+    /// Attempt to overwrite an existing file was denied.
+    #[error("overwrite denied: {0} already exists")]
+    OverwriteDenied(String),
+    /// Overwrite requires explicit confirmation (`overwrite: true`) in tool arguments.
+    #[error("overwrite not confirmed: {0} already exists; pass overwrite=true to confirm")]
+    OverwriteNotConfirmed(String),
     #[error(transparent)]
     Io(#[from] std::io::Error),
     #[error(transparent)]

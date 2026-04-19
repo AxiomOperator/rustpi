@@ -3,6 +3,7 @@ mod tests {
     use futures::StreamExt;
     use wiremock::matchers::{method, path};
     use wiremock::{Mock, MockServer, ResponseTemplate};
+    use std::time::Duration;
 
     use crate::{
         ProviderError,
@@ -10,6 +11,7 @@ mod tests {
             copilot::{CopilotAdapter, CopilotConfig},
             llamacpp::{LlamaCppAdapter, LlamaCppConfig},
             openai::{OpenAiAdapter, OpenAiConfig},
+            vllm::{VllmAdapter, VllmConfig},
         },
         provider::{ChatMessage, CompletionRequest, EmbeddingRequest, FinishReason, MessageContent, ModelProvider, Role},
     };
@@ -476,6 +478,29 @@ mod tests {
         );
     }
 
+    // ─── Helper builders — vLLM / llama.cpp ─────────────────────────────────────
+
+    fn vllm_adapter(server: &MockServer) -> VllmAdapter {
+        VllmAdapter::new(VllmConfig {
+            provider_id: ProviderId::new("vllm"),
+            base_url: server.uri(),
+            api_key: None,
+            supports_embeddings: true,
+            timeout_secs: 10,
+            static_models: vec![],
+        })
+        .unwrap()
+    }
+
+    fn llamacpp_adapter_with_server(server: &MockServer) -> LlamaCppAdapter {
+        LlamaCppAdapter::new(LlamaCppConfig {
+            base_url: server.uri(),
+            timeout_secs: 10,
+            ..Default::default()
+        })
+        .unwrap()
+    }
+
     // ─── 7. Copilot adapter ──────────────────────────────────────────────────────
 
     #[tokio::test]
@@ -526,5 +551,275 @@ mod tests {
         } else {
             panic!("expected Text content");
         }
+    }
+
+    // ─── 8. vLLM adapter — non-streaming ────────────────────────────────────────
+
+    #[tokio::test]
+    async fn vllm_complete_success() {
+        let server = MockServer::start().await;
+        Mock::given(method("POST"))
+            .and(path("/chat/completions"))
+            .respond_with(
+                ResponseTemplate::new(200)
+                    .set_body_string(chat_response_body("vLLM says hello!"))
+                    .insert_header("content-type", "application/json"),
+            )
+            .mount(&server)
+            .await;
+
+        let adapter = vllm_adapter(&server);
+        let response = adapter.complete(simple_request()).await.unwrap();
+        if let MessageContent::Text(t) = &response.message.content {
+            assert_eq!(t, "vLLM says hello!");
+        } else {
+            panic!("expected Text content");
+        }
+        assert_eq!(response.usage.total_tokens, 15);
+    }
+
+    // ─── 9. vLLM adapter — streaming ────────────────────────────────────────────
+
+    #[tokio::test]
+    async fn vllm_complete_stream_success() {
+        let server = MockServer::start().await;
+        let sse_body = concat!(
+            "data: {\"choices\":[{\"delta\":{\"content\":\"vLLM\"},\"finish_reason\":null}]}\n\n",
+            "data: {\"choices\":[{\"delta\":{\"content\":\" stream\"},\"finish_reason\":\"stop\"}]}\n\n",
+            "data: [DONE]\n\n",
+        );
+        Mock::given(method("POST"))
+            .and(path("/chat/completions"))
+            .respond_with(
+                ResponseTemplate::new(200)
+                    .set_body_string(sse_body)
+                    .insert_header("content-type", "text/event-stream"),
+            )
+            .mount(&server)
+            .await;
+
+        let adapter = vllm_adapter(&server);
+        let mut stream = adapter.complete_stream(simple_request()).await.unwrap();
+
+        let mut deltas = vec![];
+        while let Some(item) = stream.next().await {
+            deltas.push(item.unwrap());
+        }
+
+        assert!(!deltas.is_empty(), "expected at least one delta");
+        assert_eq!(deltas[0].text, Some("vLLM".to_string()));
+        assert!(
+            deltas.iter().any(|d| matches!(d.finish_reason, Some(FinishReason::Stop))),
+            "expected a Stop finish reason"
+        );
+    }
+
+    // ─── 10. vLLM adapter — model list ──────────────────────────────────────────
+
+    #[tokio::test]
+    async fn vllm_list_models_success() {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/models"))
+            .respond_with(
+                ResponseTemplate::new(200)
+                    .set_body_string(model_list_body(&["meta-llama/Llama-2-7b", "mistral-7b"]))
+                    .insert_header("content-type", "application/json"),
+            )
+            .mount(&server)
+            .await;
+
+        let adapter = vllm_adapter(&server);
+        let models = adapter.list_models().await.unwrap();
+        assert_eq!(models.len(), 2);
+        assert!(models.iter().any(|m| m.id.to_string() == "meta-llama/Llama-2-7b"));
+        assert!(models.iter().any(|m| m.id.to_string() == "mistral-7b"));
+    }
+
+    // ─── 11. vLLM adapter — 503 network/provider error ──────────────────────────
+
+    #[tokio::test]
+    async fn vllm_complete_network_error() {
+        let server = MockServer::start().await;
+        Mock::given(method("POST"))
+            .and(path("/chat/completions"))
+            .respond_with(
+                ResponseTemplate::new(503)
+                    .set_body_string("Service Unavailable"),
+            )
+            .mount(&server)
+            .await;
+
+        let adapter = vllm_adapter(&server);
+        let result = adapter.complete(simple_request()).await;
+        assert!(
+            matches!(result, Err(ProviderError::Unavailable(_)))
+                || matches!(result, Err(ProviderError::ApiError { .. })),
+            "expected Unavailable or ApiError for 503, got {result:?}"
+        );
+    }
+
+    // ─── 12. llama.cpp adapter — streaming ──────────────────────────────────────
+
+    #[tokio::test]
+    async fn llamacpp_complete_stream_success() {
+        let server = MockServer::start().await;
+        let sse_body = concat!(
+            "data: {\"choices\":[{\"delta\":{\"content\":\"llama\"},\"finish_reason\":null}]}\n\n",
+            "data: {\"choices\":[{\"delta\":{\"content\":\".cpp\"},\"finish_reason\":\"stop\"}]}\n\n",
+            "data: [DONE]\n\n",
+        );
+        Mock::given(method("POST"))
+            .and(path("/chat/completions"))
+            .respond_with(
+                ResponseTemplate::new(200)
+                    .set_body_string(sse_body)
+                    .insert_header("content-type", "text/event-stream"),
+            )
+            .mount(&server)
+            .await;
+
+        let adapter = llamacpp_adapter_with_server(&server);
+        let mut stream = adapter.complete_stream(simple_request()).await.unwrap();
+
+        let mut deltas = vec![];
+        while let Some(item) = stream.next().await {
+            deltas.push(item.unwrap());
+        }
+
+        assert!(!deltas.is_empty(), "expected at least one delta");
+        assert_eq!(deltas[0].text, Some("llama".to_string()));
+        assert!(
+            deltas.iter().any(|d| matches!(d.finish_reason, Some(FinishReason::Stop))),
+            "expected a Stop finish reason"
+        );
+    }
+
+    // ─── 13. Error normalization matrix — HTTP 429 across all adapters ───────────
+
+    #[tokio::test]
+    async fn error_normalization_matrix_429_all_adapters() {
+        // OpenAI
+        let server1 = MockServer::start().await;
+        Mock::given(method("POST"))
+            .and(path("/chat/completions"))
+            .respond_with(ResponseTemplate::new(429).set_body_string("rate limit exceeded"))
+            .mount(&server1)
+            .await;
+        let result1 = openai_adapter(&server1).complete(simple_request()).await;
+        assert!(
+            matches!(result1, Err(ProviderError::RateLimited { .. })),
+            "OpenAI: expected RateLimited, got {result1:?}"
+        );
+
+        // vLLM
+        let server2 = MockServer::start().await;
+        Mock::given(method("POST"))
+            .and(path("/chat/completions"))
+            .respond_with(ResponseTemplate::new(429).set_body_string("rate limit exceeded"))
+            .mount(&server2)
+            .await;
+        let result2 = vllm_adapter(&server2).complete(simple_request()).await;
+        assert!(
+            matches!(result2, Err(ProviderError::RateLimited { .. })),
+            "vLLM: expected RateLimited, got {result2:?}"
+        );
+
+        // llama.cpp
+        let server3 = MockServer::start().await;
+        Mock::given(method("POST"))
+            .and(path("/chat/completions"))
+            .respond_with(ResponseTemplate::new(429).set_body_string("rate limit exceeded"))
+            .mount(&server3)
+            .await;
+        let result3 = llamacpp_adapter_with_server(&server3).complete(simple_request()).await;
+        assert!(
+            matches!(result3, Err(ProviderError::RateLimited { .. })),
+            "llama.cpp: expected RateLimited, got {result3:?}"
+        );
+    }
+
+    // ─── 14. vLLM capability declarations ────────────────────────────────────────
+
+    #[test]
+    fn vllm_capabilities_streaming_and_chat() {
+        let adapter = VllmAdapter::new(VllmConfig::default()).unwrap();
+        let caps = adapter.capabilities(&ModelId::new("any-model"));
+        assert!(caps.streaming, "vLLM must support streaming");
+        assert!(caps.tool_calling, "vLLM must support tool calling");
+        assert!(caps.embeddings, "vLLM must support embeddings (default config)");
+        assert!(caps.json_mode, "vLLM must support json_mode");
+        assert!(caps.supports_model_discovery, "vLLM must support model discovery");
+        assert!(!caps.requires_auth(), "vLLM default config has no API key → no auth required");
+    }
+
+    // ─── 15. Failure modes: network drop and timeout ─────────────────────────────
+
+    /// SSE stream that delivers partial content then closes without `[DONE]`.
+    /// The adapter must not panic and must yield the valid partial delta(s).
+    #[tokio::test]
+    async fn openai_stream_drops_connection_mid_stream() {
+        let server = MockServer::start().await;
+        // Body has one valid SSE chunk but no [DONE] terminator — simulates a
+        // mid-stream connection drop after partial delivery.
+        let partial_sse = concat!(
+            "data: {\"choices\":[{\"delta\":{\"content\":\"Partial\"},\"finish_reason\":null}]}\n\n",
+            // connection closes here — no [DONE]
+        );
+        Mock::given(method("POST"))
+            .and(path("/chat/completions"))
+            .respond_with(
+                ResponseTemplate::new(200)
+                    .set_body_string(partial_sse)
+                    .insert_header("content-type", "text/event-stream"),
+            )
+            .mount(&server)
+            .await;
+
+        let adapter = openai_adapter(&server);
+        let stream = adapter.complete_stream(simple_request()).await.unwrap();
+        let items: Vec<_> = stream.collect().await;
+
+        // Must not panic; at least one partial delta should be emitted.
+        let ok_deltas: Vec<_> = items.into_iter().filter_map(|r| r.ok()).collect();
+        assert!(
+            ok_deltas.iter().any(|d| d.text == Some("Partial".to_string())),
+            "expected the partial delta to be emitted before the stream ended"
+        );
+    }
+
+    /// A provider that takes too long must return `ProviderError::Timeout`, not hang.
+    #[tokio::test]
+    async fn provider_timeout_returns_error() {
+        let server = MockServer::start().await;
+        // Delay response by 5 s; the adapter timeout is 1 s.
+        Mock::given(method("POST"))
+            .and(path("/chat/completions"))
+            .respond_with(
+                ResponseTemplate::new(200)
+                    .set_delay(Duration::from_secs(5))
+                    .set_body_string("irrelevant")
+                    .insert_header("content-type", "application/json"),
+            )
+            .mount(&server)
+            .await;
+
+        let adapter = OpenAiAdapter::new(OpenAiConfig {
+            provider_id: agent_core::types::ProviderId::new("openai"),
+            base_url: server.uri(),
+            api_key: Some("test-key".to_string()),
+            extra_headers: vec![],
+            supports_embeddings: true,
+            supports_model_discovery: true,
+            static_models: vec![],
+            timeout_secs: 1, // very short — must fire before the 5 s mock delay
+        })
+        .unwrap();
+
+        let result = adapter.complete(simple_request()).await;
+        assert!(
+            matches!(result, Err(ProviderError::Timeout)),
+            "expected Timeout error, got: {result:?}"
+        );
     }
 }

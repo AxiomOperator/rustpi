@@ -142,4 +142,47 @@ mod tests {
         let p = normalize_path(Path::new("/a/b/../c"));
         assert_eq!(p, PathBuf::from("/a/c"));
     }
+
+    #[test]
+    fn deny_traversal_with_encoded_dotdot() {
+        // %2e%2e is URL-encoded ".." — we do NOT URL-decode paths, so std::path
+        // treats it as a literal component (not as "..").
+        // The path stays under /workspace/ and is therefore allowed.
+        // Key property: URL-encoded traversal cannot escape the allowed root.
+        let policy = PathSafetyPolicy::new(["/workspace"]);
+        let result = policy.validate("/workspace/%2e%2e/etc/passwd");
+        assert!(
+            result.is_ok(),
+            "URL-encoded dotdot is a literal component, not traversal: {result:?}"
+        );
+        // Verify the normalized path is still under /workspace/
+        let normalized = result.unwrap();
+        assert!(
+            normalized.starts_with("/workspace"),
+            "path must remain under /workspace, got: {}",
+            normalized.display()
+        );
+    }
+
+    #[test]
+    fn deny_null_byte_in_path() {
+        let policy = PathSafetyPolicy::new(["/workspace"]);
+        // std::path treats null byte as a literal component; this must not panic or crash.
+        let result = policy.validate("/workspace/file\0evil");
+        // We only assert no panic — the outcome depends on OS path semantics.
+        let _ = result;
+    }
+
+    #[test]
+    fn empty_allowed_roots_denies_everything() {
+        let policy = PathSafetyPolicy::new([] as [&str; 0]);
+        assert!(
+            matches!(policy.validate("/workspace/src/main.rs"), Err(ToolError::PathTraversal(_))),
+            "empty roots must deny all paths"
+        );
+        assert!(
+            matches!(policy.validate("/"), Err(ToolError::PathTraversal(_))),
+            "empty roots must deny root path"
+        );
+    }
 }

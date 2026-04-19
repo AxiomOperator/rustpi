@@ -718,3 +718,66 @@ async fn server_exits_cleanly_on_eof() {
     assert!(result.is_ok(), "server must exit within {TIMEOUT:?} on EOF");
     assert!(result.unwrap().is_ok(), "server.run() must return Ok(())");
 }
+
+// ---------------------------------------------------------------------------
+// Phase 13 security: hostile RPC input tests
+// ---------------------------------------------------------------------------
+
+/// Sending a JSON object with an unknown method name must return a parse error,
+/// not panic or hang.
+#[tokio::test]
+async fn rpc_unknown_method_returns_error() {
+    let (mut client_w, server_r) = tokio::io::duplex(8192);
+    let (server_w, client_r) = tokio::io::duplex(8192);
+
+    // Valid JSON structure but unrecognised method name
+    client_w
+        .write_all(b"{\"id\":\"unk\",\"method\":{\"name\":\"obliterate_everything\"}}\n")
+        .await
+        .unwrap();
+    drop(client_w);
+
+    let server = RpcServer::new(server_r, server_w);
+    server.run().await.unwrap();
+
+    let mut br = BufReader::new(client_r);
+    let resp = timeout(TIMEOUT, read_resp(&mut br)).await.unwrap();
+    match &resp {
+        RpcResponse::Error { code, .. } => {
+            assert!(
+                code == "parse_error" || code == "invalid_request",
+                "expected parse_error or invalid_request for unknown method, got: {code}"
+            );
+        }
+        other => panic!("expected Error response for unknown method, got: {other:?}"),
+    }
+}
+
+/// Multiple consecutive malformed JSON lines must not cause a panic or hang.
+/// The server should return errors for each malformed line and exit cleanly on EOF.
+#[tokio::test]
+async fn rpc_malformed_json_does_not_panic() {
+    let (mut client_w, server_r) = tokio::io::duplex(8192);
+    let (server_w, client_r) = tokio::io::duplex(8192);
+
+    // Send several lines of garbage JSON — no valid request follows
+    client_w.write_all(b"}{totally invalid\n").await.unwrap();
+    client_w.write_all(b"<html>not json</html>\n").await.unwrap();
+    client_w.write_all(b"[1, 2, 3]\n").await.unwrap();
+    drop(client_w);
+
+    let server = RpcServer::new(server_r, server_w);
+    // Must complete within the timeout without panicking
+    let result = timeout(TIMEOUT, server.run()).await;
+    assert!(result.is_ok(), "server must not hang on all-malformed input");
+    // server.run() returns Ok(()) on clean exit
+    assert!(result.unwrap().is_ok(), "server must exit cleanly on EOF after malformed input");
+
+    // Verify the server emitted parse_error responses (one per bad line)
+    let mut br = BufReader::new(client_r);
+    let first = timeout(TIMEOUT, read_resp(&mut br)).await.unwrap();
+    assert!(
+        matches!(first, RpcResponse::Error { .. }),
+        "first response to malformed JSON must be an error, got: {first:?}"
+    );
+}

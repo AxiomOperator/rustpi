@@ -1,229 +1,107 @@
 warning: /home/administrator/rustpi/crates/config-core/Cargo.toml: version requirement `1.1.2+spec-1.1.0` for dependency `toml` includes semver metadata which will be ignored, removing the metadata is recommended to avoid confusion
-   0.167103060s  INFO prepare_target{force=false package_id=cli v0.1.0 (/home/administrator/rustpi/crates/cli) target="cli"}: cargo::core::compiler::fingerprint: stale: changed "/home/administrator/rustpi/crates/event-log/src/file_store.rs"
-   0.167112265s  INFO prepare_target{force=false package_id=cli v0.1.0 (/home/administrator/rustpi/crates/cli) target="cli"}: cargo::core::compiler::fingerprint:           (vs) "/home/administrator/rustpi/target/debug/.fingerprint/event-log-a675e1e9b0b72075/dep-lib-event_log"
-   0.167114945s  INFO prepare_target{force=false package_id=cli v0.1.0 (/home/administrator/rustpi/crates/cli) target="cli"}: cargo::core::compiler::fingerprint:                FileTime { seconds: 1776562293, nanos: 30149454 } < FileTime { seconds: 1776563680, nanos: 233132071 }
-   0.167351945s  INFO prepare_target{force=false package_id=cli v0.1.0 (/home/administrator/rustpi/crates/cli) target="cli"}: cargo::core::compiler::fingerprint: fingerprint error for cli v0.1.0 (/home/administrator/rustpi/crates/cli)/Check { test: false }/TargetInner { ..: lib_target("cli", ["lib"], "/home/administrator/rustpi/crates/cli/src/lib.rs", Edition2021) }
-   0.167361485s  INFO prepare_target{force=false package_id=cli v0.1.0 (/home/administrator/rustpi/crates/cli) target="cli"}: cargo::core::compiler::fingerprint:     err: failed to read `/home/administrator/rustpi/target/debug/.fingerprint/cli-05742b88b11a70a6/lib-cli`
-
-Caused by:
-    No such file or directory (os error 2)
-
-Stack backtrace:
-   0: cargo_util::paths::read_bytes
-   1: cargo_util::paths::read
-   2: cargo::core::compiler::fingerprint::_compare_old_fingerprint
-   3: cargo::core::compiler::fingerprint::prepare_target
-   4: cargo::core::compiler::compile
-   5: <cargo::core::compiler::build_runner::BuildRunner>::compile
-   6: cargo::ops::cargo_compile::compile_ws
-   7: cargo::ops::cargo_compile::compile_with_exec
-   8: cargo::ops::cargo_compile::compile
-   9: cargo::commands::check::exec
-  10: <cargo::cli::Exec>::exec
-  11: cargo::main
-  12: std::sys::backtrace::__rust_begin_short_backtrace::<fn(), ()>
-  13: std::rt::lang_start::<()>::{closure#0}
-  14: core::ops::function::impls::<impl core::ops::function::FnOnce<A> for &F>::call_once
-             at /rustc/e408947bfd200af42db322daf0fadfe7e26d3bd1/library/core/src/ops/function.rs:287:21
-  15: std::panicking::catch_unwind::do_call
-             at /rustc/e408947bfd200af42db322daf0fadfe7e26d3bd1/library/std/src/panicking.rs:581:40
-  16: std::panicking::catch_unwind
-             at /rustc/e408947bfd200af42db322daf0fadfe7e26d3bd1/library/std/src/panicking.rs:544:19
-  17: std::panic::catch_unwind
-             at /rustc/e408947bfd200af42db322daf0fadfe7e26d3bd1/library/std/src/panic.rs:359:14
-  18: std::rt::lang_start_internal::{{closure}}
-             at /rustc/e408947bfd200af42db322daf0fadfe7e26d3bd1/library/std/src/rt.rs:175:24
-  19: std::panicking::catch_unwind::do_call
-             at /rustc/e408947bfd200af42db322daf0fadfe7e26d3bd1/library/std/src/panicking.rs:581:40
-  20: std::panicking::catch_unwind
-             at /rustc/e408947bfd200af42db322daf0fadfe7e26d3bd1/library/std/src/panicking.rs:544:19
-  21: std::panic::catch_unwind
-             at /rustc/e408947bfd200af42db322daf0fadfe7e26d3bd1/library/std/src/panic.rs:359:14
-  22: std::rt::lang_start_internal
-             at /rustc/e408947bfd200af42db322daf0fadfe7e26d3bd1/library/std/src/rt.rs:171:5
-  23: main
-  24: <unknown>
-  25: __libc_start_main
-  26: <unknown>
-   0.173558784s  INFO prepare_target{force=false package_id=event-log v0.1.0 (/home/administrator/rustpi/crates/event-log) target="event_log"}: cargo::core::compiler::fingerprint: fingerprint dirty for event-log v0.1.0 (/home/administrator/rustpi/crates/event-log)/Check { test: false }/TargetInner { name_inferred: true, ..: lib_target("event_log", ["lib"], "/home/administrator/rustpi/crates/event-log/src/lib.rs", Edition2021) }
-   0.173568045s  INFO prepare_target{force=false package_id=event-log v0.1.0 (/home/administrator/rustpi/crates/event-log) target="event_log"}: cargo::core::compiler::fingerprint:     dirty: FsStatusOutdated(StaleItem(ChangedFile { reference: "/home/administrator/rustpi/target/debug/.fingerprint/event-log-a675e1e9b0b72075/dep-lib-event_log", reference_mtime: FileTime { seconds: 1776562293, nanos: 30149454 }, stale: "/home/administrator/rustpi/crates/event-log/src/file_store.rs", stale_mtime: FileTime { seconds: 1776563680, nanos: 233132071 } }))
-   0.174299702s  INFO prepare_target{force=false package_id=cli v0.1.0 (/home/administrator/rustpi/crates/cli) target="cli"}: cargo::core::compiler::fingerprint: fingerprint error for cli v0.1.0 (/home/administrator/rustpi/crates/cli)/Check { test: true }/TargetInner { ..: lib_target("cli", ["lib"], "/home/administrator/rustpi/crates/cli/src/lib.rs", Edition2021) }
-   0.174307635s  INFO prepare_target{force=false package_id=cli v0.1.0 (/home/administrator/rustpi/crates/cli) target="cli"}: cargo::core::compiler::fingerprint:     err: failed to read `/home/administrator/rustpi/target/debug/.fingerprint/cli-f9b7b71b0e246116/test-lib-cli`
-
-Caused by:
-    No such file or directory (os error 2)
-
-Stack backtrace:
-   0: cargo_util::paths::read_bytes
-   1: cargo_util::paths::read
-   2: cargo::core::compiler::fingerprint::_compare_old_fingerprint
-   3: cargo::core::compiler::fingerprint::prepare_target
-   4: cargo::core::compiler::compile
-   5: <cargo::core::compiler::build_runner::BuildRunner>::compile
-   6: cargo::ops::cargo_compile::compile_ws
-   7: cargo::ops::cargo_compile::compile_with_exec
-   8: cargo::ops::cargo_compile::compile
-   9: cargo::commands::check::exec
-  10: <cargo::cli::Exec>::exec
-  11: cargo::main
-  12: std::sys::backtrace::__rust_begin_short_backtrace::<fn(), ()>
-  13: std::rt::lang_start::<()>::{closure#0}
-  14: core::ops::function::impls::<impl core::ops::function::FnOnce<A> for &F>::call_once
-             at /rustc/e408947bfd200af42db322daf0fadfe7e26d3bd1/library/core/src/ops/function.rs:287:21
-  15: std::panicking::catch_unwind::do_call
-             at /rustc/e408947bfd200af42db322daf0fadfe7e26d3bd1/library/std/src/panicking.rs:581:40
-  16: std::panicking::catch_unwind
-             at /rustc/e408947bfd200af42db322daf0fadfe7e26d3bd1/library/std/src/panicking.rs:544:19
-  17: std::panic::catch_unwind
-             at /rustc/e408947bfd200af42db322daf0fadfe7e26d3bd1/library/std/src/panic.rs:359:14
-  18: std::rt::lang_start_internal::{{closure}}
-             at /rustc/e408947bfd200af42db322daf0fadfe7e26d3bd1/library/std/src/rt.rs:175:24
-  19: std::panicking::catch_unwind::do_call
-             at /rustc/e408947bfd200af42db322daf0fadfe7e26d3bd1/library/std/src/panicking.rs:581:40
-  20: std::panicking::catch_unwind
-             at /rustc/e408947bfd200af42db322daf0fadfe7e26d3bd1/library/std/src/panicking.rs:544:19
-  21: std::panic::catch_unwind
-             at /rustc/e408947bfd200af42db322daf0fadfe7e26d3bd1/library/std/src/panic.rs:359:14
-  22: std::rt::lang_start_internal
-             at /rustc/e408947bfd200af42db322daf0fadfe7e26d3bd1/library/std/src/rt.rs:171:5
-  23: main
-  24: <unknown>
-  25: __libc_start_main
-  26: <unknown>
-   0.174733930s  INFO prepare_target{force=false package_id=cli v0.1.0 (/home/administrator/rustpi/crates/cli) target="rustpi"}: cargo::core::compiler::fingerprint: fingerprint error for cli v0.1.0 (/home/administrator/rustpi/crates/cli)/Check { test: false }/TargetInner { name: "rustpi", doc: true, ..: with_path("/home/administrator/rustpi/crates/cli/src/main.rs", Edition2021) }
-   0.174741359s  INFO prepare_target{force=false package_id=cli v0.1.0 (/home/administrator/rustpi/crates/cli) target="rustpi"}: cargo::core::compiler::fingerprint:     err: failed to read `/home/administrator/rustpi/target/debug/.fingerprint/cli-e4161899f7f90413/bin-rustpi`
-
-Caused by:
-    No such file or directory (os error 2)
-
-Stack backtrace:
-   0: cargo_util::paths::read_bytes
-   1: cargo_util::paths::read
-   2: cargo::core::compiler::fingerprint::_compare_old_fingerprint
-   3: cargo::core::compiler::fingerprint::prepare_target
-   4: cargo::core::compiler::compile
-   5: <cargo::core::compiler::build_runner::BuildRunner>::compile
-   6: cargo::ops::cargo_compile::compile_ws
-   7: cargo::ops::cargo_compile::compile_with_exec
-   8: cargo::ops::cargo_compile::compile
-   9: cargo::commands::check::exec
-  10: <cargo::cli::Exec>::exec
-  11: cargo::main
-  12: std::sys::backtrace::__rust_begin_short_backtrace::<fn(), ()>
-  13: std::rt::lang_start::<()>::{closure#0}
-  14: core::ops::function::impls::<impl core::ops::function::FnOnce<A> for &F>::call_once
-             at /rustc/e408947bfd200af42db322daf0fadfe7e26d3bd1/library/core/src/ops/function.rs:287:21
-  15: std::panicking::catch_unwind::do_call
-             at /rustc/e408947bfd200af42db322daf0fadfe7e26d3bd1/library/std/src/panicking.rs:581:40
-  16: std::panicking::catch_unwind
-             at /rustc/e408947bfd200af42db322daf0fadfe7e26d3bd1/library/std/src/panicking.rs:544:19
-  17: std::panic::catch_unwind
-             at /rustc/e408947bfd200af42db322daf0fadfe7e26d3bd1/library/std/src/panic.rs:359:14
-  18: std::rt::lang_start_internal::{{closure}}
-             at /rustc/e408947bfd200af42db322daf0fadfe7e26d3bd1/library/std/src/rt.rs:175:24
-  19: std::panicking::catch_unwind::do_call
-             at /rustc/e408947bfd200af42db322daf0fadfe7e26d3bd1/library/std/src/panicking.rs:581:40
-  20: std::panicking::catch_unwind
-             at /rustc/e408947bfd200af42db322daf0fadfe7e26d3bd1/library/std/src/panicking.rs:544:19
-  21: std::panic::catch_unwind
-             at /rustc/e408947bfd200af42db322daf0fadfe7e26d3bd1/library/std/src/panic.rs:359:14
-  22: std::rt::lang_start_internal
-             at /rustc/e408947bfd200af42db322daf0fadfe7e26d3bd1/library/std/src/rt.rs:171:5
-  23: main
-  24: <unknown>
-  25: __libc_start_main
-  26: <unknown>
-   0.175146564s  INFO prepare_target{force=false package_id=cli v0.1.0 (/home/administrator/rustpi/crates/cli) target="rustpi"}: cargo::core::compiler::fingerprint: fingerprint error for cli v0.1.0 (/home/administrator/rustpi/crates/cli)/Check { test: true }/TargetInner { name: "rustpi", doc: true, ..: with_path("/home/administrator/rustpi/crates/cli/src/main.rs", Edition2021) }
-   0.175153742s  INFO prepare_target{force=false package_id=cli v0.1.0 (/home/administrator/rustpi/crates/cli) target="rustpi"}: cargo::core::compiler::fingerprint:     err: failed to read `/home/administrator/rustpi/target/debug/.fingerprint/cli-2523621875290832/test-bin-rustpi`
-
-Caused by:
-    No such file or directory (os error 2)
-
-Stack backtrace:
-   0: cargo_util::paths::read_bytes
-   1: cargo_util::paths::read
-   2: cargo::core::compiler::fingerprint::_compare_old_fingerprint
-   3: cargo::core::compiler::fingerprint::prepare_target
-   4: cargo::core::compiler::compile
-   5: <cargo::core::compiler::build_runner::BuildRunner>::compile
-   6: cargo::ops::cargo_compile::compile_ws
-   7: cargo::ops::cargo_compile::compile_with_exec
-   8: cargo::ops::cargo_compile::compile
-   9: cargo::commands::check::exec
-  10: <cargo::cli::Exec>::exec
-  11: cargo::main
-  12: std::sys::backtrace::__rust_begin_short_backtrace::<fn(), ()>
-  13: std::rt::lang_start::<()>::{closure#0}
-  14: core::ops::function::impls::<impl core::ops::function::FnOnce<A> for &F>::call_once
-             at /rustc/e408947bfd200af42db322daf0fadfe7e26d3bd1/library/core/src/ops/function.rs:287:21
-  15: std::panicking::catch_unwind::do_call
-             at /rustc/e408947bfd200af42db322daf0fadfe7e26d3bd1/library/std/src/panicking.rs:581:40
-  16: std::panicking::catch_unwind
-             at /rustc/e408947bfd200af42db322daf0fadfe7e26d3bd1/library/std/src/panicking.rs:544:19
-  17: std::panic::catch_unwind
-             at /rustc/e408947bfd200af42db322daf0fadfe7e26d3bd1/library/std/src/panic.rs:359:14
-  18: std::rt::lang_start_internal::{{closure}}
-             at /rustc/e408947bfd200af42db322daf0fadfe7e26d3bd1/library/std/src/rt.rs:175:24
-  19: std::panicking::catch_unwind::do_call
-             at /rustc/e408947bfd200af42db322daf0fadfe7e26d3bd1/library/std/src/panicking.rs:581:40
-  20: std::panicking::catch_unwind
-             at /rustc/e408947bfd200af42db322daf0fadfe7e26d3bd1/library/std/src/panicking.rs:544:19
-  21: std::panic::catch_unwind
-             at /rustc/e408947bfd200af42db322daf0fadfe7e26d3bd1/library/std/src/panic.rs:359:14
-  22: std::rt::lang_start_internal
-             at /rustc/e408947bfd200af42db322daf0fadfe7e26d3bd1/library/std/src/rt.rs:171:5
-  23: main
-  24: <unknown>
-  25: __libc_start_main
-  26: <unknown>
-   0.175609268s  INFO prepare_target{force=false package_id=cli v0.1.0 (/home/administrator/rustpi/crates/cli) target="cli_tests"}: cargo::core::compiler::fingerprint: fingerprint error for cli v0.1.0 (/home/administrator/rustpi/crates/cli)/Check { test: true }/TargetInner { kind: "test", name: "cli_tests", benched: false, ..: with_path("/home/administrator/rustpi/crates/cli/tests/cli_tests.rs", Edition2021) }
-   0.175616908s  INFO prepare_target{force=false package_id=cli v0.1.0 (/home/administrator/rustpi/crates/cli) target="cli_tests"}: cargo::core::compiler::fingerprint:     err: failed to read `/home/administrator/rustpi/target/debug/.fingerprint/cli-c18f58f7ff9decaf/test-integration-test-cli_tests`
-
-Caused by:
-    No such file or directory (os error 2)
-
-Stack backtrace:
-   0: cargo_util::paths::read_bytes
-   1: cargo_util::paths::read
-   2: cargo::core::compiler::fingerprint::_compare_old_fingerprint
-   3: cargo::core::compiler::fingerprint::prepare_target
-   4: cargo::core::compiler::compile
-   5: <cargo::core::compiler::build_runner::BuildRunner>::compile
-   6: cargo::ops::cargo_compile::compile_ws
-   7: cargo::ops::cargo_compile::compile_with_exec
-   8: cargo::ops::cargo_compile::compile
-   9: cargo::commands::check::exec
-  10: <cargo::cli::Exec>::exec
-  11: cargo::main
-  12: std::sys::backtrace::__rust_begin_short_backtrace::<fn(), ()>
-  13: std::rt::lang_start::<()>::{closure#0}
-  14: core::ops::function::impls::<impl core::ops::function::FnOnce<A> for &F>::call_once
-             at /rustc/e408947bfd200af42db322daf0fadfe7e26d3bd1/library/core/src/ops/function.rs:287:21
-  15: std::panicking::catch_unwind::do_call
-             at /rustc/e408947bfd200af42db322daf0fadfe7e26d3bd1/library/std/src/panicking.rs:581:40
-  16: std::panicking::catch_unwind
-             at /rustc/e408947bfd200af42db322daf0fadfe7e26d3bd1/library/std/src/panicking.rs:544:19
-  17: std::panic::catch_unwind
-             at /rustc/e408947bfd200af42db322daf0fadfe7e26d3bd1/library/std/src/panic.rs:359:14
-  18: std::rt::lang_start_internal::{{closure}}
-             at /rustc/e408947bfd200af42db322daf0fadfe7e26d3bd1/library/std/src/rt.rs:175:24
-  19: std::panicking::catch_unwind::do_call
-             at /rustc/e408947bfd200af42db322daf0fadfe7e26d3bd1/library/std/src/panicking.rs:581:40
-  20: std::panicking::catch_unwind
-             at /rustc/e408947bfd200af42db322daf0fadfe7e26d3bd1/library/std/src/panicking.rs:544:19
-  21: std::panic::catch_unwind
-             at /rustc/e408947bfd200af42db322daf0fadfe7e26d3bd1/library/std/src/panic.rs:359:14
-  22: std::rt::lang_start_internal
-             at /rustc/e408947bfd200af42db322daf0fadfe7e26d3bd1/library/std/src/rt.rs:171:5
-  23: main
-  24: <unknown>
-  25: __libc_start_main
-  26: <unknown>
-   0.176663110s  INFO prepare_target{force=false package_id=event-log v0.1.0 (/home/administrator/rustpi/crates/event-log) target="event_log"}: cargo::core::compiler::fingerprint: stale: changed "/home/administrator/rustpi/crates/event-log/src/lib.rs"
-   0.176667532s  INFO prepare_target{force=false package_id=event-log v0.1.0 (/home/administrator/rustpi/crates/event-log) target="event_log"}: cargo::core::compiler::fingerprint:           (vs) "/home/administrator/rustpi/target/debug/.fingerprint/event-log-9824bebd7fd4961f/dep-test-lib-event_log"
-   0.176670030s  INFO prepare_target{force=false package_id=event-log v0.1.0 (/home/administrator/rustpi/crates/event-log) target="event_log"}: cargo::core::compiler::fingerprint:                FileTime { seconds: 1776562293, nanos: 982159872 } < FileTime { seconds: 1776563593, nanos: 980557611 }
-   0.176691243s  INFO prepare_target{force=false package_id=event-log v0.1.0 (/home/administrator/rustpi/crates/event-log) target="event_log"}: cargo::core::compiler::fingerprint: fingerprint dirty for event-log v0.1.0 (/home/administrator/rustpi/crates/event-log)/Check { test: true }/TargetInner { name_inferred: true, ..: lib_target("event_log", ["lib"], "/home/administrator/rustpi/crates/event-log/src/lib.rs", Edition2021) }
-   0.176697648s  INFO prepare_target{force=false package_id=event-log v0.1.0 (/home/administrator/rustpi/crates/event-log) target="event_log"}: cargo::core::compiler::fingerprint:     dirty: FsStatusOutdated(StaleItem(ChangedFile { reference: "/home/administrator/rustpi/target/debug/.fingerprint/event-log-9824bebd7fd4961f/dep-test-lib-event_log", reference_mtime: FileTime { seconds: 1776562293, nanos: 982159872 }, stale: "/home/administrator/rustpi/crates/event-log/src/lib.rs", stale_mtime: FileTime { seconds: 1776563593, nanos: 980557611 } }))
+   0.243880257s  INFO prepare_target{force=false package_id=agent-core v0.1.0 (/home/administrator/rustpi/crates/agent-core) target="agent_core"}: cargo::core::compiler::fingerprint: stale: changed "/home/administrator/rustpi/crates/agent-core/src/types.rs"
+   0.243891436s  INFO prepare_target{force=false package_id=agent-core v0.1.0 (/home/administrator/rustpi/crates/agent-core) target="agent_core"}: cargo::core::compiler::fingerprint:           (vs) "/home/administrator/rustpi/target/debug/.fingerprint/agent-core-03ae817864545188/dep-lib-agent_core"
+   0.243894647s  INFO prepare_target{force=false package_id=agent-core v0.1.0 (/home/administrator/rustpi/crates/agent-core) target="agent_core"}: cargo::core::compiler::fingerprint:                FileTime { seconds: 1776566069, nanos: 4032898 } < FileTime { seconds: 1776566752, nanos: 783184958 }
+   0.243963742s  INFO prepare_target{force=false package_id=agent-core v0.1.0 (/home/administrator/rustpi/crates/agent-core) target="agent_core"}: cargo::core::compiler::fingerprint: fingerprint dirty for agent-core v0.1.0 (/home/administrator/rustpi/crates/agent-core)/Check { test: false }/TargetInner { name_inferred: true, ..: lib_target("agent_core", ["lib"], "/home/administrator/rustpi/crates/agent-core/src/lib.rs", Edition2021) }
+   0.243974654s  INFO prepare_target{force=false package_id=agent-core v0.1.0 (/home/administrator/rustpi/crates/agent-core) target="agent_core"}: cargo::core::compiler::fingerprint:     dirty: FsStatusOutdated(StaleItem(ChangedFile { reference: "/home/administrator/rustpi/target/debug/.fingerprint/agent-core-03ae817864545188/dep-lib-agent_core", reference_mtime: FileTime { seconds: 1776566069, nanos: 4032898 }, stale: "/home/administrator/rustpi/crates/agent-core/src/types.rs", stale_mtime: FileTime { seconds: 1776566752, nanos: 783184958 } }))
+   0.252478031s  INFO prepare_target{force=false package_id=agent-core v0.1.0 (/home/administrator/rustpi/crates/agent-core) target="agent_core"}: cargo::core::compiler::fingerprint: fingerprint dirty for agent-core v0.1.0 (/home/administrator/rustpi/crates/agent-core)/Check { test: true }/TargetInner { name_inferred: true, ..: lib_target("agent_core", ["lib"], "/home/administrator/rustpi/crates/agent-core/src/lib.rs", Edition2021) }
+   0.252499541s  INFO prepare_target{force=false package_id=agent-core v0.1.0 (/home/administrator/rustpi/crates/agent-core) target="agent_core"}: cargo::core::compiler::fingerprint:     dirty: FsStatusOutdated(StaleDepFingerprint { unit: UnitIndex(473) })
+   0.253679751s  INFO prepare_target{force=false package_id=context-engine v0.1.0 (/home/administrator/rustpi/crates/context-engine) target="context_engine"}: cargo::core::compiler::fingerprint: fingerprint dirty for context-engine v0.1.0 (/home/administrator/rustpi/crates/context-engine)/Check { test: false }/TargetInner { name_inferred: true, ..: lib_target("context_engine", ["lib"], "/home/administrator/rustpi/crates/context-engine/src/lib.rs", Edition2021) }
+   0.253693047s  INFO prepare_target{force=false package_id=context-engine v0.1.0 (/home/administrator/rustpi/crates/context-engine) target="context_engine"}: cargo::core::compiler::fingerprint:     dirty: FsStatusOutdated(StaleDepFingerprint { unit: UnitIndex(4) })
+   0.254367222s  INFO prepare_target{force=false package_id=session-store v0.1.0 (/home/administrator/rustpi/crates/session-store) target="session_store"}: cargo::core::compiler::fingerprint: fingerprint dirty for session-store v0.1.0 (/home/administrator/rustpi/crates/session-store)/Check { test: false }/TargetInner { name_inferred: true, ..: lib_target("session_store", ["lib"], "/home/administrator/rustpi/crates/session-store/src/lib.rs", Edition2021) }
+   0.254377910s  INFO prepare_target{force=false package_id=session-store v0.1.0 (/home/administrator/rustpi/crates/session-store) target="session_store"}: cargo::core::compiler::fingerprint:     dirty: FsStatusOutdated(StaleDepFingerprint { unit: UnitIndex(4) })
+   0.255059454s  INFO prepare_target{force=false package_id=config-core v0.1.0 (/home/administrator/rustpi/crates/config-core) target="config_core"}: cargo::core::compiler::fingerprint: fingerprint dirty for config-core v0.1.0 (/home/administrator/rustpi/crates/config-core)/Check { test: false }/TargetInner { name_inferred: true, ..: lib_target("config_core", ["lib"], "/home/administrator/rustpi/crates/config-core/src/lib.rs", Edition2021) }
+   0.255070026s  INFO prepare_target{force=false package_id=config-core v0.1.0 (/home/administrator/rustpi/crates/config-core) target="config_core"}: cargo::core::compiler::fingerprint:     dirty: FsStatusOutdated(StaleDepFingerprint { unit: UnitIndex(4) })
+   0.266774747s  INFO prepare_target{force=false package_id=tool-runtime v0.1.0 (/home/administrator/rustpi/crates/tool-runtime) target="tool_runtime"}: cargo::core::compiler::fingerprint: fingerprint dirty for tool-runtime v0.1.0 (/home/administrator/rustpi/crates/tool-runtime)/Check { test: false }/TargetInner { name_inferred: true, ..: lib_target("tool_runtime", ["lib"], "/home/administrator/rustpi/crates/tool-runtime/src/lib.rs", Edition2021) }
+   0.266791367s  INFO prepare_target{force=false package_id=tool-runtime v0.1.0 (/home/administrator/rustpi/crates/tool-runtime) target="tool_runtime"}: cargo::core::compiler::fingerprint:     dirty: FsStatusOutdated(StaleDepFingerprint { unit: UnitIndex(4) })
+   0.267367387s  INFO prepare_target{force=false package_id=agent-core v0.1.0 (/home/administrator/rustpi/crates/agent-core) target="lifecycle_integration"}: cargo::core::compiler::fingerprint: fingerprint dirty for agent-core v0.1.0 (/home/administrator/rustpi/crates/agent-core)/Check { test: true }/TargetInner { kind: "test", name: "lifecycle_integration", benched: false, ..: with_path("/home/administrator/rustpi/crates/agent-core/tests/lifecycle_integration.rs", Edition2021) }
+   0.267378073s  INFO prepare_target{force=false package_id=agent-core v0.1.0 (/home/administrator/rustpi/crates/agent-core) target="lifecycle_integration"}: cargo::core::compiler::fingerprint:     dirty: FsStatusOutdated(StaleDepFingerprint { unit: UnitIndex(473) })
+   0.269162740s  INFO prepare_target{force=false package_id=auth-core v0.1.0 (/home/administrator/rustpi/crates/auth-core) target="auth_core"}: cargo::core::compiler::fingerprint: fingerprint dirty for auth-core v0.1.0 (/home/administrator/rustpi/crates/auth-core)/Check { test: false }/TargetInner { name_inferred: true, ..: lib_target("auth_core", ["lib"], "/home/administrator/rustpi/crates/auth-core/src/lib.rs", Edition2021) }
+   0.269175476s  INFO prepare_target{force=false package_id=auth-core v0.1.0 (/home/administrator/rustpi/crates/auth-core) target="auth_core"}: cargo::core::compiler::fingerprint:     dirty: FsStatusOutdated(StaleDepFingerprint { unit: UnitIndex(4) })
+   0.271341799s  INFO prepare_target{force=false package_id=auth-core v0.1.0 (/home/administrator/rustpi/crates/auth-core) target="auth_core"}: cargo::core::compiler::fingerprint: fingerprint dirty for auth-core v0.1.0 (/home/administrator/rustpi/crates/auth-core)/Check { test: true }/TargetInner { name_inferred: true, ..: lib_target("auth_core", ["lib"], "/home/administrator/rustpi/crates/auth-core/src/lib.rs", Edition2021) }
+   0.271375939s  INFO prepare_target{force=false package_id=auth-core v0.1.0 (/home/administrator/rustpi/crates/auth-core) target="auth_core"}: cargo::core::compiler::fingerprint:     dirty: FsStatusOutdated(StaleDepFingerprint { unit: UnitIndex(4) })
+   0.272963671s  INFO prepare_target{force=false package_id=cli v0.1.0 (/home/administrator/rustpi/crates/cli) target="cli"}: cargo::core::compiler::fingerprint: fingerprint dirty for cli v0.1.0 (/home/administrator/rustpi/crates/cli)/Check { test: false }/TargetInner { ..: lib_target("cli", ["lib"], "/home/administrator/rustpi/crates/cli/src/lib.rs", Edition2021) }
+   0.273000980s  INFO prepare_target{force=false package_id=cli v0.1.0 (/home/administrator/rustpi/crates/cli) target="cli"}: cargo::core::compiler::fingerprint:     dirty: FsStatusOutdated(StaleDepFingerprint { unit: UnitIndex(4) })
+   0.274319345s  INFO prepare_target{force=false package_id=event-log v0.1.0 (/home/administrator/rustpi/crates/event-log) target="event_log"}: cargo::core::compiler::fingerprint: fingerprint dirty for event-log v0.1.0 (/home/administrator/rustpi/crates/event-log)/Check { test: false }/TargetInner { name_inferred: true, ..: lib_target("event_log", ["lib"], "/home/administrator/rustpi/crates/event-log/src/lib.rs", Edition2021) }
+   0.274332830s  INFO prepare_target{force=false package_id=event-log v0.1.0 (/home/administrator/rustpi/crates/event-log) target="event_log"}: cargo::core::compiler::fingerprint:     dirty: FsStatusOutdated(StaleDepFingerprint { unit: UnitIndex(4) })
+   0.274759585s  INFO prepare_target{force=false package_id=rpc-api v0.1.0 (/home/administrator/rustpi/crates/rpc-api) target="rpc_api"}: cargo::core::compiler::fingerprint: fingerprint dirty for rpc-api v0.1.0 (/home/administrator/rustpi/crates/rpc-api)/Check { test: false }/TargetInner { name_inferred: true, ..: lib_target("rpc_api", ["lib"], "/home/administrator/rustpi/crates/rpc-api/src/lib.rs", Edition2021) }
+   0.274773093s  INFO prepare_target{force=false package_id=rpc-api v0.1.0 (/home/administrator/rustpi/crates/rpc-api) target="rpc_api"}: cargo::core::compiler::fingerprint:     dirty: FsStatusOutdated(StaleDepFingerprint { unit: UnitIndex(4) })
+   0.275394231s  INFO prepare_target{force=false package_id=cli v0.1.0 (/home/administrator/rustpi/crates/cli) target="cli"}: cargo::core::compiler::fingerprint: fingerprint dirty for cli v0.1.0 (/home/administrator/rustpi/crates/cli)/Check { test: true }/TargetInner { ..: lib_target("cli", ["lib"], "/home/administrator/rustpi/crates/cli/src/lib.rs", Edition2021) }
+   0.275404536s  INFO prepare_target{force=false package_id=cli v0.1.0 (/home/administrator/rustpi/crates/cli) target="cli"}: cargo::core::compiler::fingerprint:     dirty: FsStatusOutdated(StaleDepFingerprint { unit: UnitIndex(4) })
+   0.275929028s  INFO prepare_target{force=false package_id=cli v0.1.0 (/home/administrator/rustpi/crates/cli) target="rustpi"}: cargo::core::compiler::fingerprint: fingerprint dirty for cli v0.1.0 (/home/administrator/rustpi/crates/cli)/Check { test: false }/TargetInner { name: "rustpi", doc: true, ..: with_path("/home/administrator/rustpi/crates/cli/src/main.rs", Edition2021) }
+   0.275939037s  INFO prepare_target{force=false package_id=cli v0.1.0 (/home/administrator/rustpi/crates/cli) target="rustpi"}: cargo::core::compiler::fingerprint:     dirty: FsStatusOutdated(StaleDepFingerprint { unit: UnitIndex(60) })
+   0.276495478s  INFO prepare_target{force=false package_id=cli v0.1.0 (/home/administrator/rustpi/crates/cli) target="rustpi"}: cargo::core::compiler::fingerprint: fingerprint dirty for cli v0.1.0 (/home/administrator/rustpi/crates/cli)/Check { test: true }/TargetInner { name: "rustpi", doc: true, ..: with_path("/home/administrator/rustpi/crates/cli/src/main.rs", Edition2021) }
+   0.276504728s  INFO prepare_target{force=false package_id=cli v0.1.0 (/home/administrator/rustpi/crates/cli) target="rustpi"}: cargo::core::compiler::fingerprint:     dirty: FsStatusOutdated(StaleDepFingerprint { unit: UnitIndex(60) })
+   0.277037012s  INFO prepare_target{force=false package_id=cli v0.1.0 (/home/administrator/rustpi/crates/cli) target="cli_tests"}: cargo::core::compiler::fingerprint: fingerprint dirty for cli v0.1.0 (/home/administrator/rustpi/crates/cli)/Check { test: true }/TargetInner { kind: "test", name: "cli_tests", benched: false, ..: with_path("/home/administrator/rustpi/crates/cli/tests/cli_tests.rs", Edition2021) }
+   0.277046696s  INFO prepare_target{force=false package_id=cli v0.1.0 (/home/administrator/rustpi/crates/cli) target="cli_tests"}: cargo::core::compiler::fingerprint:     dirty: FsStatusOutdated(StaleDepFingerprint { unit: UnitIndex(60) })
+   0.277777350s  INFO prepare_target{force=false package_id=config-core v0.1.0 (/home/administrator/rustpi/crates/config-core) target="config_core"}: cargo::core::compiler::fingerprint: fingerprint dirty for config-core v0.1.0 (/home/administrator/rustpi/crates/config-core)/Check { test: true }/TargetInner { name_inferred: true, ..: lib_target("config_core", ["lib"], "/home/administrator/rustpi/crates/config-core/src/lib.rs", Edition2021) }
+   0.277802165s  INFO prepare_target{force=false package_id=config-core v0.1.0 (/home/administrator/rustpi/crates/config-core) target="config_core"}: cargo::core::compiler::fingerprint:     dirty: FsStatusOutdated(StaleDepFingerprint { unit: UnitIndex(4) })
+   0.278162348s  INFO prepare_target{force=false package_id=context-engine v0.1.0 (/home/administrator/rustpi/crates/context-engine) target="context_engine"}: cargo::core::compiler::fingerprint: fingerprint dirty for context-engine v0.1.0 (/home/administrator/rustpi/crates/context-engine)/Check { test: true }/TargetInner { name_inferred: true, ..: lib_target("context_engine", ["lib"], "/home/administrator/rustpi/crates/context-engine/src/lib.rs", Edition2021) }
+   0.278186484s  INFO prepare_target{force=false package_id=context-engine v0.1.0 (/home/administrator/rustpi/crates/context-engine) target="context_engine"}: cargo::core::compiler::fingerprint:     dirty: FsStatusOutdated(StaleDepFingerprint { unit: UnitIndex(4) })
+   0.278658814s  INFO prepare_target{force=false package_id=context-engine v0.1.0 (/home/administrator/rustpi/crates/context-engine) target="context_engine_integration"}: cargo::core::compiler::fingerprint: fingerprint dirty for context-engine v0.1.0 (/home/administrator/rustpi/crates/context-engine)/Check { test: true }/TargetInner { kind: "test", name: "context_engine_integration", benched: false, ..: with_path("/home/administrator/rustpi/crates/context-engine/tests/context_engine_integration.rs", Edition2021) }
+   0.278683092s  INFO prepare_target{force=false package_id=context-engine v0.1.0 (/home/administrator/rustpi/crates/context-engine) target="context_engine_integration"}: cargo::core::compiler::fingerprint:     dirty: FsStatusOutdated(StaleDepFingerprint { unit: UnitIndex(4) })
+   0.279165308s  INFO prepare_target{force=false package_id=event-log v0.1.0 (/home/administrator/rustpi/crates/event-log) target="event_log"}: cargo::core::compiler::fingerprint: fingerprint dirty for event-log v0.1.0 (/home/administrator/rustpi/crates/event-log)/Check { test: true }/TargetInner { name_inferred: true, ..: lib_target("event_log", ["lib"], "/home/administrator/rustpi/crates/event-log/src/lib.rs", Edition2021) }
+   0.279203386s  INFO prepare_target{force=false package_id=event-log v0.1.0 (/home/administrator/rustpi/crates/event-log) target="event_log"}: cargo::core::compiler::fingerprint:     dirty: FsStatusOutdated(StaleDepFingerprint { unit: UnitIndex(4) })
+   0.279591751s  INFO prepare_target{force=false package_id=event-log v0.1.0 (/home/administrator/rustpi/crates/event-log) target="replay_tests"}: cargo::core::compiler::fingerprint: fingerprint dirty for event-log v0.1.0 (/home/administrator/rustpi/crates/event-log)/Check { test: true }/TargetInner { kind: "test", name: "replay_tests", benched: false, ..: with_path("/home/administrator/rustpi/crates/event-log/tests/replay_tests.rs", Edition2021) }
+   0.279616257s  INFO prepare_target{force=false package_id=event-log v0.1.0 (/home/administrator/rustpi/crates/event-log) target="replay_tests"}: cargo::core::compiler::fingerprint:     dirty: FsStatusOutdated(StaleDepFingerprint { unit: UnitIndex(4) })
+   0.280812553s  INFO prepare_target{force=false package_id=memory-sync v0.1.0 (/home/administrator/rustpi/crates/memory-sync) target="memory_sync"}: cargo::core::compiler::fingerprint: fingerprint dirty for memory-sync v0.1.0 (/home/administrator/rustpi/crates/memory-sync)/Check { test: false }/TargetInner { name_inferred: true, ..: lib_target("memory_sync", ["lib"], "/home/administrator/rustpi/crates/memory-sync/src/lib.rs", Edition2021) }
+   0.280846997s  INFO prepare_target{force=false package_id=memory-sync v0.1.0 (/home/administrator/rustpi/crates/memory-sync) target="memory_sync"}: cargo::core::compiler::fingerprint:     dirty: FsStatusOutdated(StaleDepFingerprint { unit: UnitIndex(4) })
+   0.283569078s  INFO prepare_target{force=false package_id=memory-sync v0.1.0 (/home/administrator/rustpi/crates/memory-sync) target="memory_sync"}: cargo::core::compiler::fingerprint: fingerprint dirty for memory-sync v0.1.0 (/home/administrator/rustpi/crates/memory-sync)/Check { test: true }/TargetInner { name_inferred: true, ..: lib_target("memory_sync", ["lib"], "/home/administrator/rustpi/crates/memory-sync/src/lib.rs", Edition2021) }
+   0.283612453s  INFO prepare_target{force=false package_id=memory-sync v0.1.0 (/home/administrator/rustpi/crates/memory-sync) target="memory_sync"}: cargo::core::compiler::fingerprint:     dirty: FsStatusOutdated(StaleDepFingerprint { unit: UnitIndex(4) })
+   0.284505926s  INFO prepare_target{force=false package_id=memory-sync v0.1.0 (/home/administrator/rustpi/crates/memory-sync) target="integration"}: cargo::core::compiler::fingerprint: fingerprint dirty for memory-sync v0.1.0 (/home/administrator/rustpi/crates/memory-sync)/Check { test: true }/TargetInner { kind: "test", name: "integration", benched: false, ..: with_path("/home/administrator/rustpi/crates/memory-sync/tests/integration.rs", Edition2021) }
+   0.284559847s  INFO prepare_target{force=false package_id=memory-sync v0.1.0 (/home/administrator/rustpi/crates/memory-sync) target="integration"}: cargo::core::compiler::fingerprint:     dirty: FsStatusOutdated(StaleDepFingerprint { unit: UnitIndex(4) })
+   0.285461809s  INFO prepare_target{force=false package_id=memory-sync v0.1.0 (/home/administrator/rustpi/crates/memory-sync) target="qdrant_tests"}: cargo::core::compiler::fingerprint: fingerprint dirty for memory-sync v0.1.0 (/home/administrator/rustpi/crates/memory-sync)/Check { test: true }/TargetInner { kind: "test", name: "qdrant_tests", benched: false, ..: with_path("/home/administrator/rustpi/crates/memory-sync/tests/qdrant_tests.rs", Edition2021) }
+   0.285497687s  INFO prepare_target{force=false package_id=memory-sync v0.1.0 (/home/administrator/rustpi/crates/memory-sync) target="qdrant_tests"}: cargo::core::compiler::fingerprint:     dirty: FsStatusOutdated(StaleDepFingerprint { unit: UnitIndex(4) })
+   0.286301932s  INFO prepare_target{force=false package_id=model-adapters v0.1.0 (/home/administrator/rustpi/crates/model-adapters) target="model_adapters"}: cargo::core::compiler::fingerprint: fingerprint dirty for model-adapters v0.1.0 (/home/administrator/rustpi/crates/model-adapters)/Check { test: false }/TargetInner { name_inferred: true, ..: lib_target("model_adapters", ["lib"], "/home/administrator/rustpi/crates/model-adapters/src/lib.rs", Edition2021) }
+   0.286342850s  INFO prepare_target{force=false package_id=model-adapters v0.1.0 (/home/administrator/rustpi/crates/model-adapters) target="model_adapters"}: cargo::core::compiler::fingerprint:     dirty: FsStatusOutdated(StaleDepFingerprint { unit: UnitIndex(25) })
+   0.286987429s  INFO prepare_target{force=false package_id=model-adapters v0.1.0 (/home/administrator/rustpi/crates/model-adapters) target="model_adapters"}: cargo::core::compiler::fingerprint: fingerprint dirty for model-adapters v0.1.0 (/home/administrator/rustpi/crates/model-adapters)/Check { test: true }/TargetInner { name_inferred: true, ..: lib_target("model_adapters", ["lib"], "/home/administrator/rustpi/crates/model-adapters/src/lib.rs", Edition2021) }
+   0.287015775s  INFO prepare_target{force=false package_id=model-adapters v0.1.0 (/home/administrator/rustpi/crates/model-adapters) target="model_adapters"}: cargo::core::compiler::fingerprint:     dirty: FsStatusOutdated(StaleDepFingerprint { unit: UnitIndex(25) })
+   0.287775120s  INFO prepare_target{force=false package_id=observability v0.1.0 (/home/administrator/rustpi/crates/observability) target="observability"}: cargo::core::compiler::fingerprint: fingerprint dirty for observability v0.1.0 (/home/administrator/rustpi/crates/observability)/Check { test: false }/TargetInner { name_inferred: true, ..: lib_target("observability", ["lib"], "/home/administrator/rustpi/crates/observability/src/lib.rs", Edition2021) }
+   0.287786880s  INFO prepare_target{force=false package_id=observability v0.1.0 (/home/administrator/rustpi/crates/observability) target="observability"}: cargo::core::compiler::fingerprint:     dirty: FsStatusOutdated(StaleDepFingerprint { unit: UnitIndex(4) })
+   0.288105054s  INFO prepare_target{force=false package_id=observability v0.1.0 (/home/administrator/rustpi/crates/observability) target="observability"}: cargo::core::compiler::fingerprint: fingerprint dirty for observability v0.1.0 (/home/administrator/rustpi/crates/observability)/Check { test: true }/TargetInner { name_inferred: true, ..: lib_target("observability", ["lib"], "/home/administrator/rustpi/crates/observability/src/lib.rs", Edition2021) }
+   0.288114570s  INFO prepare_target{force=false package_id=observability v0.1.0 (/home/administrator/rustpi/crates/observability) target="observability"}: cargo::core::compiler::fingerprint:     dirty: FsStatusOutdated(StaleDepFingerprint { unit: UnitIndex(4) })
+   0.288507429s  INFO prepare_target{force=false package_id=policy-engine v0.1.0 (/home/administrator/rustpi/crates/policy-engine) target="policy_engine"}: cargo::core::compiler::fingerprint: fingerprint dirty for policy-engine v0.1.0 (/home/administrator/rustpi/crates/policy-engine)/Check { test: false }/TargetInner { name_inferred: true, ..: lib_target("policy_engine", ["lib"], "/home/administrator/rustpi/crates/policy-engine/src/lib.rs", Edition2021) }
+   0.288520056s  INFO prepare_target{force=false package_id=policy-engine v0.1.0 (/home/administrator/rustpi/crates/policy-engine) target="policy_engine"}: cargo::core::compiler::fingerprint:     dirty: FsStatusOutdated(StaleDepFingerprint { unit: UnitIndex(4) })
+   0.288824929s  INFO prepare_target{force=false package_id=policy-engine v0.1.0 (/home/administrator/rustpi/crates/policy-engine) target="policy_engine"}: cargo::core::compiler::fingerprint: fingerprint dirty for policy-engine v0.1.0 (/home/administrator/rustpi/crates/policy-engine)/Check { test: true }/TargetInner { name_inferred: true, ..: lib_target("policy_engine", ["lib"], "/home/administrator/rustpi/crates/policy-engine/src/lib.rs", Edition2021) }
+   0.288849448s  INFO prepare_target{force=false package_id=policy-engine v0.1.0 (/home/administrator/rustpi/crates/policy-engine) target="policy_engine"}: cargo::core::compiler::fingerprint:     dirty: FsStatusOutdated(StaleDepFingerprint { unit: UnitIndex(4) })
+   0.289195009s  INFO prepare_target{force=false package_id=rpc-api v0.1.0 (/home/administrator/rustpi/crates/rpc-api) target="rpc_api"}: cargo::core::compiler::fingerprint: fingerprint dirty for rpc-api v0.1.0 (/home/administrator/rustpi/crates/rpc-api)/Check { test: true }/TargetInner { name_inferred: true, ..: lib_target("rpc_api", ["lib"], "/home/administrator/rustpi/crates/rpc-api/src/lib.rs", Edition2021) }
+   0.289207123s  INFO prepare_target{force=false package_id=rpc-api v0.1.0 (/home/administrator/rustpi/crates/rpc-api) target="rpc_api"}: cargo::core::compiler::fingerprint:     dirty: FsStatusOutdated(StaleDepFingerprint { unit: UnitIndex(4) })
+   0.289624986s  INFO prepare_target{force=false package_id=rpc-api v0.1.0 (/home/administrator/rustpi/crates/rpc-api) target="integration"}: cargo::core::compiler::fingerprint: fingerprint dirty for rpc-api v0.1.0 (/home/administrator/rustpi/crates/rpc-api)/Check { test: true }/TargetInner { kind: "test", name: "integration", benched: false, ..: with_path("/home/administrator/rustpi/crates/rpc-api/tests/integration.rs", Edition2021) }
+   0.289647818s  INFO prepare_target{force=false package_id=rpc-api v0.1.0 (/home/administrator/rustpi/crates/rpc-api) target="integration"}: cargo::core::compiler::fingerprint:     dirty: FsStatusOutdated(StaleDepFingerprint { unit: UnitIndex(4) })
+   0.290064428s  INFO prepare_target{force=false package_id=session-store v0.1.0 (/home/administrator/rustpi/crates/session-store) target="session_store"}: cargo::core::compiler::fingerprint: fingerprint dirty for session-store v0.1.0 (/home/administrator/rustpi/crates/session-store)/Check { test: true }/TargetInner { name_inferred: true, ..: lib_target("session_store", ["lib"], "/home/administrator/rustpi/crates/session-store/src/lib.rs", Edition2021) }
+   0.290076672s  INFO prepare_target{force=false package_id=session-store v0.1.0 (/home/administrator/rustpi/crates/session-store) target="session_store"}: cargo::core::compiler::fingerprint:     dirty: FsStatusOutdated(StaleDepFingerprint { unit: UnitIndex(4) })
+   0.291289911s  INFO prepare_target{force=false package_id=session-store v0.1.0 (/home/administrator/rustpi/crates/session-store) target="integration"}: cargo::core::compiler::fingerprint: fingerprint dirty for session-store v0.1.0 (/home/administrator/rustpi/crates/session-store)/Check { test: true }/TargetInner { kind: "test", name: "integration", benched: false, ..: with_path("/home/administrator/rustpi/crates/session-store/tests/integration.rs", Edition2021) }
+   0.291304193s  INFO prepare_target{force=false package_id=session-store v0.1.0 (/home/administrator/rustpi/crates/session-store) target="integration"}: cargo::core::compiler::fingerprint:     dirty: FsStatusOutdated(StaleDepFingerprint { unit: UnitIndex(4) })
+   0.292340300s  INFO prepare_target{force=false package_id=session-store v0.1.0 (/home/administrator/rustpi/crates/session-store) target="recovery_tests"}: cargo::core::compiler::fingerprint: fingerprint dirty for session-store v0.1.0 (/home/administrator/rustpi/crates/session-store)/Check { test: true }/TargetInner { kind: "test", name: "recovery_tests", benched: false, ..: with_path("/home/administrator/rustpi/crates/session-store/tests/recovery_tests.rs", Edition2021) }
+   0.292351308s  INFO prepare_target{force=false package_id=session-store v0.1.0 (/home/administrator/rustpi/crates/session-store) target="recovery_tests"}: cargo::core::compiler::fingerprint:     dirty: FsStatusOutdated(StaleDepFingerprint { unit: UnitIndex(4) })
+   0.293362274s  INFO prepare_target{force=false package_id=tool-runtime v0.1.0 (/home/administrator/rustpi/crates/tool-runtime) target="tool_runtime"}: cargo::core::compiler::fingerprint: fingerprint dirty for tool-runtime v0.1.0 (/home/administrator/rustpi/crates/tool-runtime)/Check { test: true }/TargetInner { name_inferred: true, ..: lib_target("tool_runtime", ["lib"], "/home/administrator/rustpi/crates/tool-runtime/src/lib.rs", Edition2021) }
+   0.293374283s  INFO prepare_target{force=false package_id=tool-runtime v0.1.0 (/home/administrator/rustpi/crates/tool-runtime) target="tool_runtime"}: cargo::core::compiler::fingerprint:     dirty: FsStatusOutdated(StaleDepFingerprint { unit: UnitIndex(4) })
+   0.293761932s  INFO prepare_target{force=false package_id=tool-runtime v0.1.0 (/home/administrator/rustpi/crates/tool-runtime) target="failure_modes"}: cargo::core::compiler::fingerprint: fingerprint dirty for tool-runtime v0.1.0 (/home/administrator/rustpi/crates/tool-runtime)/Check { test: true }/TargetInner { kind: "test", name: "failure_modes", benched: false, ..: with_path("/home/administrator/rustpi/crates/tool-runtime/tests/failure_modes.rs", Edition2021) }
+   0.293772671s  INFO prepare_target{force=false package_id=tool-runtime v0.1.0 (/home/administrator/rustpi/crates/tool-runtime) target="failure_modes"}: cargo::core::compiler::fingerprint:     dirty: FsStatusOutdated(StaleDepFingerprint { unit: UnitIndex(473) })
+   0.294289790s  INFO prepare_target{force=false package_id=tool-runtime v0.1.0 (/home/administrator/rustpi/crates/tool-runtime) target="tool_runtime_integration"}: cargo::core::compiler::fingerprint: fingerprint dirty for tool-runtime v0.1.0 (/home/administrator/rustpi/crates/tool-runtime)/Check { test: true }/TargetInner { kind: "test", name: "tool_runtime_integration", benched: false, ..: with_path("/home/administrator/rustpi/crates/tool-runtime/tests/tool_runtime_integration.rs", Edition2021) }
+   0.294303635s  INFO prepare_target{force=false package_id=tool-runtime v0.1.0 (/home/administrator/rustpi/crates/tool-runtime) target="tool_runtime_integration"}: cargo::core::compiler::fingerprint:     dirty: FsStatusOutdated(StaleDepFingerprint { unit: UnitIndex(473) })
+   0.295291104s  INFO prepare_target{force=false package_id=tui v0.1.0 (/home/administrator/rustpi/crates/tui) target="tui"}: cargo::core::compiler::fingerprint: fingerprint dirty for tui v0.1.0 (/home/administrator/rustpi/crates/tui)/Check { test: false }/TargetInner { name_inferred: true, ..: lib_target("tui", ["lib"], "/home/administrator/rustpi/crates/tui/src/lib.rs", Edition2021) }
+   0.295319217s  INFO prepare_target{force=false package_id=tui v0.1.0 (/home/administrator/rustpi/crates/tui) target="tui"}: cargo::core::compiler::fingerprint:     dirty: FsStatusOutdated(StaleDepFingerprint { unit: UnitIndex(4) })
+   0.297151258s  INFO prepare_target{force=false package_id=tui v0.1.0 (/home/administrator/rustpi/crates/tui) target="tui"}: cargo::core::compiler::fingerprint: fingerprint dirty for tui v0.1.0 (/home/administrator/rustpi/crates/tui)/Check { test: true }/TargetInner { name_inferred: true, ..: lib_target("tui", ["lib"], "/home/administrator/rustpi/crates/tui/src/lib.rs", Edition2021) }
+   0.297285896s  INFO prepare_target{force=false package_id=tui v0.1.0 (/home/administrator/rustpi/crates/tui) target="tui"}: cargo::core::compiler::fingerprint:     dirty: FsStatusOutdated(StaleDepFingerprint { unit: UnitIndex(4) })
+   0.297898976s  INFO prepare_target{force=false package_id=tui v0.1.0 (/home/administrator/rustpi/crates/tui) target="rustpi-tui"}: cargo::core::compiler::fingerprint: fingerprint dirty for tui v0.1.0 (/home/administrator/rustpi/crates/tui)/Check { test: false }/TargetInner { name: "rustpi-tui", doc: true, ..: with_path("/home/administrator/rustpi/crates/tui/src/main.rs", Edition2021) }
+   0.297909037s  INFO prepare_target{force=false package_id=tui v0.1.0 (/home/administrator/rustpi/crates/tui) target="rustpi-tui"}: cargo::core::compiler::fingerprint:     dirty: FsStatusOutdated(StaleDepFingerprint { unit: UnitIndex(491) })
+   0.298435356s  INFO prepare_target{force=false package_id=tui v0.1.0 (/home/administrator/rustpi/crates/tui) target="rustpi-tui"}: cargo::core::compiler::fingerprint: fingerprint dirty for tui v0.1.0 (/home/administrator/rustpi/crates/tui)/Check { test: true }/TargetInner { name: "rustpi-tui", doc: true, ..: with_path("/home/administrator/rustpi/crates/tui/src/main.rs", Edition2021) }
+   0.298444429s  INFO prepare_target{force=false package_id=tui v0.1.0 (/home/administrator/rustpi/crates/tui) target="rustpi-tui"}: cargo::core::compiler::fingerprint:     dirty: FsStatusOutdated(StaleDepFingerprint { unit: UnitIndex(491) })
+   0.299001077s  INFO prepare_target{force=false package_id=tui v0.1.0 (/home/administrator/rustpi/crates/tui) target="tui_tests"}: cargo::core::compiler::fingerprint: fingerprint dirty for tui v0.1.0 (/home/administrator/rustpi/crates/tui)/Check { test: true }/TargetInner { kind: "test", name: "tui_tests", benched: false, ..: with_path("/home/administrator/rustpi/crates/tui/tests/tui_tests.rs", Edition2021) }
+   0.299014414s  INFO prepare_target{force=false package_id=tui v0.1.0 (/home/administrator/rustpi/crates/tui) target="tui_tests"}: cargo::core::compiler::fingerprint:     dirty: FsStatusOutdated(StaleDepFingerprint { unit: UnitIndex(491) })
+    Checking agent-core v0.1.0 (/home/administrator/rustpi/crates/agent-core)
+    Checking config-core v0.1.0 (/home/administrator/rustpi/crates/config-core)
+    Checking rpc-api v0.1.0 (/home/administrator/rustpi/crates/rpc-api)
+    Checking context-engine v0.1.0 (/home/administrator/rustpi/crates/context-engine)
     Checking event-log v0.1.0 (/home/administrator/rustpi/crates/event-log)
+    Checking tool-runtime v0.1.0 (/home/administrator/rustpi/crates/tool-runtime)
+    Checking auth-core v0.1.0 (/home/administrator/rustpi/crates/auth-core)
+    Checking policy-engine v0.1.0 (/home/administrator/rustpi/crates/policy-engine)
+    Checking observability v0.1.0 (/home/administrator/rustpi/crates/observability)
+    Checking model-adapters v0.1.0 (/home/administrator/rustpi/crates/model-adapters)
+    Checking memory-sync v0.1.0 (/home/administrator/rustpi/crates/memory-sync)
+    Checking session-store v0.1.0 (/home/administrator/rustpi/crates/session-store)
     Checking cli v0.1.0 (/home/administrator/rustpi/crates/cli)
-    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.78s
+    Checking tui v0.1.0 (/home/administrator/rustpi/crates/tui)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 1.60s

@@ -17,7 +17,7 @@
 //! - `old_str` not found in file → `InvalidArguments`
 //! - Path outside allowed roots → `PathTraversal`
 
-use crate::{path_safety::PathSafetyPolicy, ToolError};
+use crate::{overwrite_policy::OverwritePolicy, path_safety::PathSafetyPolicy, ToolError};
 use agent_core::types::{ToolCall, ToolResult};
 use async_trait::async_trait;
 use serde_json::json;
@@ -25,11 +25,25 @@ use std::sync::Arc;
 
 pub struct EditTool {
     policy: Arc<PathSafetyPolicy>,
+    overwrite_policy: OverwritePolicy,
 }
 
 impl EditTool {
     pub fn new(policy: Arc<PathSafetyPolicy>) -> Self {
-        Self { policy }
+        Self {
+            policy,
+            overwrite_policy: OverwritePolicy::Allow,
+        }
+    }
+
+    pub fn new_with_policy(
+        policy: Arc<PathSafetyPolicy>,
+        overwrite_policy: OverwritePolicy,
+    ) -> Self {
+        Self {
+            policy,
+            overwrite_policy,
+        }
     }
 }
 
@@ -51,7 +65,12 @@ impl crate::registry::Tool for EditTool {
                     "path": { "type": "string" },
                     "old_str": { "type": "string", "description": "Exact string to find." },
                     "new_str": { "type": "string", "description": "Replacement string." },
-                    "replace_all": { "type": "boolean", "default": false }
+                    "replace_all": { "type": "boolean", "default": false },
+                    "overwrite_confirmed": {
+                        "type": "boolean",
+                        "description": "Set to true to confirm modifying the file when required by policy.",
+                        "default": false
+                    }
                 }
             }
         })
@@ -91,7 +110,17 @@ impl crate::registry::Tool for EditTool {
             .and_then(|v| v.as_bool())
             .unwrap_or(false);
 
+        let overwrite_confirmed = call
+            .arguments
+            .get("overwrite_confirmed")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false);
+
         let safe_path = self.policy.validate(path_str)?;
+
+        // Edit always targets an existing file; apply overwrite policy before I/O.
+        // DenyExisting always denies; RequireConfirmation requires overwrite_confirmed=true.
+        self.overwrite_policy.check(&safe_path, overwrite_confirmed)?;
 
         let original = tokio::fs::read_to_string(&safe_path)
             .await
@@ -138,6 +167,7 @@ impl crate::registry::Tool for EditTool {
 mod tests {
     use super::*;
     use crate::registry::Tool;
+    use crate::OverwritePolicy;
     use tempfile::TempDir;
 
     fn policy_for(dir: &TempDir) -> Arc<PathSafetyPolicy> {
@@ -229,5 +259,47 @@ mod tests {
             tool.execute(call).await,
             Err(ToolError::PathTraversal(_))
         ));
+    }
+
+    #[tokio::test]
+    async fn edit_tool_deny_existing_always_denies() {
+        let dir = TempDir::new().unwrap();
+        let path = dir.path().join("file.txt");
+        std::fs::write(&path, "hello world\n").unwrap();
+        let tool = EditTool::new_with_policy(policy_for(&dir), OverwritePolicy::DenyExisting);
+        let call = ToolCall {
+            id: "e5".into(),
+            name: "edit_file".into(),
+            arguments: json!({
+                "path": path.to_string_lossy(),
+                "old_str": "hello",
+                "new_str": "goodbye"
+            }),
+        };
+        assert!(matches!(
+            tool.execute(call).await,
+            Err(ToolError::OverwriteDenied(_))
+        ));
+    }
+
+    #[tokio::test]
+    async fn edit_tool_allow_policy_works_normally() {
+        let dir = TempDir::new().unwrap();
+        let path = dir.path().join("file.txt");
+        std::fs::write(&path, "hello world\n").unwrap();
+        let tool = EditTool::new_with_policy(policy_for(&dir), OverwritePolicy::Allow);
+        let call = ToolCall {
+            id: "e6".into(),
+            name: "edit_file".into(),
+            arguments: json!({
+                "path": path.to_string_lossy(),
+                "old_str": "hello",
+                "new_str": "goodbye"
+            }),
+        };
+        let result = tool.execute(call).await.unwrap();
+        assert!(result.success);
+        assert_eq!(result.output["replacements"], 1);
+        assert!(std::fs::read_to_string(&path).unwrap().starts_with("goodbye"));
     }
 }

@@ -16,7 +16,7 @@
 //! }
 //! ```
 
-use crate::{path_safety::PathSafetyPolicy, ToolError};
+use crate::{overwrite_policy::OverwritePolicy, path_safety::PathSafetyPolicy, ToolError};
 use agent_core::types::{ToolCall, ToolResult};
 use async_trait::async_trait;
 use serde_json::json;
@@ -99,11 +99,25 @@ impl crate::registry::Tool for ReadFileTool {
 /// Writes content to a file. Creates or overwrites. Sensitivity: High.
 pub struct WriteFileTool {
     policy: Arc<PathSafetyPolicy>,
+    overwrite_policy: OverwritePolicy,
 }
 
 impl WriteFileTool {
     pub fn new(policy: Arc<PathSafetyPolicy>) -> Self {
-        Self { policy }
+        Self {
+            policy,
+            overwrite_policy: OverwritePolicy::Allow,
+        }
+    }
+
+    pub fn new_with_policy(
+        policy: Arc<PathSafetyPolicy>,
+        overwrite_policy: OverwritePolicy,
+    ) -> Self {
+        Self {
+            policy,
+            overwrite_policy,
+        }
     }
 }
 
@@ -133,6 +147,11 @@ impl crate::registry::Tool for WriteFileTool {
                     "create_dirs": {
                         "type": "boolean",
                         "description": "If true, create parent directories if they don't exist.",
+                        "default": false
+                    },
+                    "overwrite": {
+                        "type": "boolean",
+                        "description": "Set to true to confirm overwriting an existing file when required by policy.",
                         "default": false
                     }
                 }
@@ -165,7 +184,15 @@ impl crate::registry::Tool for WriteFileTool {
             .and_then(|v| v.as_bool())
             .unwrap_or(false);
 
+        let overwrite_confirmed = call
+            .arguments
+            .get("overwrite")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false);
+
         let safe_path = self.policy.validate(path_str)?;
+
+        self.overwrite_policy.check(&safe_path, overwrite_confirmed)?;
 
         if create_dirs {
             if let Some(parent) = safe_path.parent() {
@@ -197,6 +224,7 @@ impl crate::registry::Tool for WriteFileTool {
 mod tests {
     use super::*;
     use crate::registry::Tool;
+    use crate::OverwritePolicy;
     use tempfile::TempDir;
 
     fn policy_for(dir: &TempDir) -> Arc<PathSafetyPolicy> {
@@ -297,5 +325,92 @@ mod tests {
         let result = tool.execute(call).await.unwrap();
         assert!(result.success);
         assert!(file_path.exists());
+    }
+
+    #[tokio::test]
+    async fn write_tool_deny_overwrite_existing() {
+        let dir = TempDir::new().unwrap();
+        let file_path = dir.path().join("existing.txt");
+        std::fs::write(&file_path, "original").unwrap();
+        let tool = WriteFileTool::new_with_policy(policy_for(&dir), OverwritePolicy::DenyExisting);
+        let call = ToolCall {
+            id: "c4".into(),
+            name: "write_file".into(),
+            arguments: json!({
+                "path": file_path.to_string_lossy(),
+                "content": "new content"
+            }),
+        };
+        assert!(matches!(
+            tool.execute(call).await,
+            Err(ToolError::OverwriteDenied(_))
+        ));
+    }
+
+    #[tokio::test]
+    async fn write_tool_require_confirmation_without_flag() {
+        let dir = TempDir::new().unwrap();
+        let file_path = dir.path().join("existing.txt");
+        std::fs::write(&file_path, "original").unwrap();
+        let tool = WriteFileTool::new_with_policy(
+            policy_for(&dir),
+            OverwritePolicy::RequireConfirmation,
+        );
+        let call = ToolCall {
+            id: "c5".into(),
+            name: "write_file".into(),
+            arguments: json!({
+                "path": file_path.to_string_lossy(),
+                "content": "new content"
+            }),
+        };
+        assert!(matches!(
+            tool.execute(call).await,
+            Err(ToolError::OverwriteNotConfirmed(_))
+        ));
+    }
+
+    #[tokio::test]
+    async fn write_tool_require_confirmation_with_flag() {
+        let dir = TempDir::new().unwrap();
+        let file_path = dir.path().join("existing.txt");
+        std::fs::write(&file_path, "original").unwrap();
+        let tool = WriteFileTool::new_with_policy(
+            policy_for(&dir),
+            OverwritePolicy::RequireConfirmation,
+        );
+        let call = ToolCall {
+            id: "c6".into(),
+            name: "write_file".into(),
+            arguments: json!({
+                "path": file_path.to_string_lossy(),
+                "content": "new content",
+                "overwrite": true
+            }),
+        };
+        let result = tool.execute(call).await.unwrap();
+        assert!(result.success);
+        assert_eq!(std::fs::read_to_string(&file_path).unwrap(), "new content");
+    }
+
+    #[tokio::test]
+    async fn write_tool_allow_new_file_always() {
+        let dir = TempDir::new().unwrap();
+        let file_path = dir.path().join("brand_new.txt");
+        let tool = WriteFileTool::new_with_policy(policy_for(&dir), OverwritePolicy::DenyExisting);
+        let call = ToolCall {
+            id: "c7".into(),
+            name: "write_file".into(),
+            arguments: json!({
+                "path": file_path.to_string_lossy(),
+                "content": "fresh content"
+            }),
+        };
+        let result = tool.execute(call).await.unwrap();
+        assert!(result.success);
+        assert_eq!(
+            std::fs::read_to_string(&file_path).unwrap(),
+            "fresh content"
+        );
     }
 }

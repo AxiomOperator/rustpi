@@ -23,6 +23,7 @@ use tokio_util::sync::CancellationToken;
 
 use tool_runtime::{
     approval::{AllowList, AutoApprove, DenyAbove},
+    overwrite_policy::OverwritePolicy,
     path_safety::PathSafetyPolicy,
     registry::ToolRegistry,
     runner::ToolRunner,
@@ -1038,4 +1039,170 @@ async fn tool_runner_emits_approval_denied_event() {
 
     assert!(has_approval_denied, "expected ApprovalDenied event; got: {events:?}");
     assert!(has_tool_failed, "expected ToolFailed event; got: {events:?}");
+}
+
+// ── M. Security hardening — additional approval enforcement tests ─────────────
+
+/// DenyAbove(Critical): High < Critical, so write_file (High) must be APPROVED.
+#[tokio::test]
+async fn deny_above_critical_approves_high() {
+    let dir = TempDir::new().unwrap();
+    let file_path = dir.path().join("new_file.txt");
+    let reg = make_registry(make_policy(&dir), None);
+    let runner = ToolRunner::new(reg, Duration::from_secs(30))
+        .with_approval(Arc::new(DenyAbove { threshold: ToolSensitivity::Critical }));
+
+    let result = runner
+        .execute_simple(
+            ToolCall {
+                id: "m-crit".into(),
+                name: "write_file".into(),
+                arguments: json!({ "path": file_path.to_string_lossy(), "content": "hello" }),
+            },
+            fresh_run_id(),
+        )
+        .await;
+
+    assert!(
+        result.is_ok(),
+        "DenyAbove(Critical) must approve High-sensitivity write_file; got: {result:?}"
+    );
+}
+
+/// DenyAbove(High): edit_file is High sensitivity → must be DENIED.
+#[tokio::test]
+async fn runner_with_deny_all_blocks_high_tools() {
+    let dir = TempDir::new().unwrap();
+    let file_path = dir.path().join("edit_target.txt");
+    std::fs::write(&file_path, "original").unwrap();
+
+    let reg = make_registry(make_policy(&dir), None);
+    let runner = ToolRunner::new(reg, Duration::from_secs(30))
+        .with_approval(Arc::new(DenyAbove { threshold: ToolSensitivity::High }));
+
+    let err = runner
+        .execute_simple(
+            ToolCall {
+                id: "m-high".into(),
+                name: "edit_file".into(),
+                arguments: json!({
+                    "path": file_path.to_string_lossy(),
+                    "old_str": "original",
+                    "new_str": "modified"
+                }),
+            },
+            fresh_run_id(),
+        )
+        .await
+        .unwrap_err();
+
+    assert!(
+        matches!(err, ToolError::PolicyDenied(_)),
+        "DenyAbove(High) must block edit_file (High sensitivity); got: {err:?}"
+    );
+}
+
+/// AllowList(["read_file"]): read_file (Safe, bypasses hook) is allowed;
+/// write_file (High, hook invoked, not in list) is denied.
+#[tokio::test]
+async fn allow_list_approves_only_listed_tools() {
+    let dir = TempDir::new().unwrap();
+    let file_path = dir.path().join("listed.txt");
+    std::fs::write(&file_path, "content").unwrap();
+
+    let reg = make_registry(make_policy(&dir), None);
+    let runner = ToolRunner::new(reg, Duration::from_secs(30))
+        .with_approval(Arc::new(AllowList::new(["read_file"])));
+
+    // read_file is Safe → bypasses approval hook entirely → allowed
+    let read_result = runner
+        .execute_simple(
+            ToolCall {
+                id: "al-read".into(),
+                name: "read_file".into(),
+                arguments: json!({ "path": file_path.to_string_lossy() }),
+            },
+            fresh_run_id(),
+        )
+        .await;
+    assert!(read_result.is_ok(), "read_file must be allowed; got: {read_result:?}");
+
+    // write_file is High → hook invoked → not in AllowList → PolicyDenied
+    let write_result = runner
+        .execute_simple(
+            ToolCall {
+                id: "al-write".into(),
+                name: "write_file".into(),
+                arguments: json!({ "path": file_path.to_string_lossy(), "content": "new" }),
+            },
+            fresh_run_id(),
+        )
+        .await;
+    assert!(
+        matches!(write_result, Err(ToolError::PolicyDenied(_))),
+        "write_file not in allow-list must be denied; got: {write_result:?}"
+    );
+}
+
+// ── N. Overwrite safeguard integration tests ──────────────────────────────────
+
+/// DenyExisting policy on a NEW file path → must succeed (new file is not an overwrite).
+#[tokio::test]
+async fn write_tool_allow_new_file_with_deny_policy() {
+    let dir = TempDir::new().unwrap();
+    let new_file = dir.path().join("brand_new.txt");
+
+    let mut reg = ToolRegistry::default();
+    reg.register(Arc::new(WriteFileTool::new_with_policy(
+        make_policy(&dir),
+        OverwritePolicy::DenyExisting,
+    )));
+    let runner = ToolRunner::new(Arc::new(reg), Duration::from_secs(30));
+
+    let result = runner
+        .execute_simple(
+            ToolCall {
+                id: "ow-new".into(),
+                name: "write_file".into(),
+                arguments: json!({ "path": new_file.to_string_lossy(), "content": "fresh" }),
+            },
+            fresh_run_id(),
+        )
+        .await;
+
+    assert!(result.is_ok(), "DenyExisting allows new file; got: {result:?}");
+    assert_eq!(std::fs::read_to_string(&new_file).unwrap(), "fresh");
+}
+
+/// RequireConfirmation policy, existing file, explicit `overwrite: true` → must succeed.
+#[tokio::test]
+async fn write_tool_overwrite_confirmed_flag_works() {
+    let dir = TempDir::new().unwrap();
+    let existing = dir.path().join("existing.txt");
+    std::fs::write(&existing, "original").unwrap();
+
+    let mut reg = ToolRegistry::default();
+    reg.register(Arc::new(WriteFileTool::new_with_policy(
+        make_policy(&dir),
+        OverwritePolicy::RequireConfirmation,
+    )));
+    let runner = ToolRunner::new(Arc::new(reg), Duration::from_secs(30));
+
+    let result = runner
+        .execute_simple(
+            ToolCall {
+                id: "ow-confirm".into(),
+                name: "write_file".into(),
+                arguments: json!({
+                    "path": existing.to_string_lossy(),
+                    "content": "updated",
+                    "overwrite": true
+                }),
+            },
+            fresh_run_id(),
+        )
+        .await;
+
+    assert!(result.is_ok(), "RequireConfirmation with overwrite:true must succeed; got: {result:?}");
+    assert_eq!(std::fs::read_to_string(&existing).unwrap(), "updated");
 }

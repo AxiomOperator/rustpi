@@ -4,7 +4,16 @@ version = "0.1.0"
 edition = "2021"
 description = "Core agent runtime: session/run state machine, event bus, prompt assembly, cancellation"
 
+[dev-dependencies]
+session-store = { path = "../session-store" }
+context-engine = { path = "../context-engine" }
+tool-runtime = { path = "../tool-runtime" }
+tokio = { workspace = true }
+tempfile = "3"
+chrono = { workspace = true }
+
 [dependencies]
+regex = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 uuid = { workspace = true }

@@ -418,4 +418,47 @@ mod tests {
         let result = store.delete(&ProviderId::new("ghost-provider")).await;
         assert!(result.is_ok(), "deleting a nonexistent provider should not return an error");
     }
+
+    // ── Phase 13 security: encrypted store failure modes ──────────────────
+
+    #[test]
+    fn encrypted_wrong_key_fails_to_decrypt() {
+        let dir = tempfile::tempdir().unwrap();
+        // Save a record with the original key
+        {
+            let store = EncryptedFileTokenStore::new(dir.path()).unwrap();
+            store.save_record(&sample_record("github")).unwrap();
+        }
+        // Overwrite the key file with a different (but valid-length) key
+        let key_path = dir.path().join("rustpi").join("auth.key");
+        // 32 zero bytes base64-encoded — wrong key, right length
+        let wrong_key_b64 = B64.encode([0u8; 32]);
+        std::fs::write(&key_path, wrong_key_b64).unwrap();
+
+        // Reopen with the wrong key — decryption must fail, not panic
+        let store2 = EncryptedFileTokenStore::new(dir.path()).unwrap();
+        let result = store2.load_record(&ProviderId::new("github"));
+        assert!(
+            result.is_err(),
+            "loading with wrong key must return an error, got: {result:?}"
+        );
+    }
+
+    #[test]
+    fn encrypted_corrupted_ciphertext_errors_cleanly() {
+        let dir = tempfile::tempdir().unwrap();
+        // Create the store (generates a key)
+        let store = EncryptedFileTokenStore::new(dir.path()).unwrap();
+
+        // Write garbage bytes to the tokens.enc file
+        let tokens_path = dir.path().join("rustpi").join("tokens.enc");
+        std::fs::write(&tokens_path, b"not valid ciphertext at all garbage garbage garbage garbage").unwrap();
+
+        // Must return an error, not panic
+        let result = store.load_record(&ProviderId::new("github"));
+        assert!(
+            result.is_err(),
+            "corrupted ciphertext must return an error, not panic; got: {result:?}"
+        );
+    }
 }

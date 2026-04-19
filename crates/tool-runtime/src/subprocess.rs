@@ -7,8 +7,9 @@
 //! - Captures up to `MAX_OUTPUT_BYTES` of each stream to include in the final result
 //! - Returns a [`SubprocessResult`] with exit code, captured output, and termination reason
 
-use agent_core::types::{AgentEvent, RunId};
+use agent_core::{types::{AgentEvent, RunId}, Redactor};
 use chrono::Utc;
+use std::sync::Arc;
 use std::time::Duration;
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::process::Command;
@@ -64,6 +65,9 @@ pub struct SubprocessConfig {
     pub run_id: Option<RunId>,
     /// call_id context for event payloads.
     pub call_id: Option<String>,
+    /// Optional redactor applied to each captured line before emitting events and
+    /// storing to captured output.
+    pub redactor: Option<Arc<Redactor>>,
 }
 
 /// Spawn a subprocess and run it to completion (or timeout/cancellation).
@@ -92,12 +96,18 @@ pub async fn run_subprocess(config: SubprocessConfig) -> std::io::Result<Subproc
     let event_tx_stderr = config.event_tx.clone();
     let run_id_stderr = run_id.clone();
     let call_id_stderr = call_id.clone();
+    let redactor_stdout = config.redactor.clone();
+    let redactor_stderr = config.redactor.clone();
 
     // Spawn stdout reader task
     let stdout_task = tokio::spawn(async move {
         let mut reader = BufReader::new(stdout_pipe).lines();
         let mut captured = String::new();
         while let Ok(Some(line)) = reader.next_line().await {
+            let line = match &redactor_stdout {
+                Some(r) => r.redact(&line),
+                None => line,
+            };
             if captured.len() < MAX_OUTPUT_BYTES {
                 captured.push_str(&line);
                 captured.push('\n');
@@ -121,6 +131,10 @@ pub async fn run_subprocess(config: SubprocessConfig) -> std::io::Result<Subproc
         let mut reader = BufReader::new(stderr_pipe).lines();
         let mut captured = String::new();
         while let Ok(Some(line)) = reader.next_line().await {
+            let line = match &redactor_stderr {
+                Some(r) => r.redact(&line),
+                None => line,
+            };
             if captured.len() < MAX_OUTPUT_BYTES {
                 captured.push_str(&line);
                 captured.push('\n');
@@ -201,6 +215,7 @@ mod tests {
             event_tx: None,
             run_id: None,
             call_id: None,
+            redactor: None,
         })
         .await
         .unwrap();
@@ -222,6 +237,7 @@ mod tests {
             event_tx: None,
             run_id: None,
             call_id: None,
+            redactor: None,
         })
         .await
         .unwrap();
@@ -242,6 +258,7 @@ mod tests {
             event_tx: None,
             run_id: None,
             call_id: None,
+            redactor: None,
         })
         .await
         .unwrap();
@@ -270,6 +287,7 @@ mod tests {
             event_tx: None,
             run_id: None,
             call_id: None,
+            redactor: None,
         })
         .await
         .unwrap();
@@ -290,6 +308,7 @@ mod tests {
             event_tx: Some(tx),
             run_id: Some(agent_core::types::RunId::new()),
             call_id: Some("test-call".into()),
+            redactor: None,
         })
         .await
         .unwrap();
