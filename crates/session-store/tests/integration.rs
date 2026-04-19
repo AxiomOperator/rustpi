@@ -311,6 +311,8 @@ async fn factory_build_session_store_sqlite() {
         obsidian_vault_path: None,
         qdrant_enabled: false,
         qdrant_url: None,
+        qdrant_api_key: None,
+        qdrant_collection_name: None,
         postgres_url: None,
     };
 
@@ -328,6 +330,8 @@ async fn factory_build_session_store_sled() {
         obsidian_vault_path: None,
         qdrant_enabled: false,
         qdrant_url: None,
+        qdrant_api_key: None,
+        qdrant_collection_name: None,
         postgres_url: None,
     };
 

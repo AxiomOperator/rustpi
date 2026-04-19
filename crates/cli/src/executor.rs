@@ -63,6 +63,38 @@ impl Executor {
         let event_log_path = format!("{}/events.jsonl", rustpi_dir);
         let _ = tokio::fs::create_dir_all(&rustpi_dir).await;
 
+        // Build Qdrant memory retriever if enabled in config.
+        let memory_retriever: Arc<dyn context_engine::memory::MemoryRetriever> = {
+            let mc = &config.memory;
+            if mc.qdrant_enabled {
+                match mc.qdrant_url.as_deref() {
+                    Some(url) => {
+                        match memory_sync::qdrant::QdrantMemory::new(
+                            url,
+                            mc.qdrant_api_key.clone(),
+                            mc.qdrant_collection_name.clone(),
+                            None,
+                        ) {
+                            Ok(qm) => {
+                                tracing::info!("Qdrant memory enabled ({})", url);
+                                Arc::new(qm)
+                            }
+                            Err(e) => {
+                                tracing::warn!("Qdrant init failed, using no-op memory: {}", e);
+                                Arc::new(context_engine::memory::NoopMemory)
+                            }
+                        }
+                    }
+                    None => {
+                        tracing::warn!("qdrant_enabled = true but qdrant_url is not set; using no-op memory");
+                        Arc::new(context_engine::memory::NoopMemory)
+                    }
+                }
+            } else {
+                Arc::new(context_engine::memory::NoopMemory)
+            }
+        };
+
         match (
             build_session_store(&config.memory).await,
             build_run_store(&config.memory).await,
@@ -70,12 +102,13 @@ impl Executor {
         ) {
             (Ok(ss), Ok(rs), Ok(es)) => {
                 tracing::info!("persistence initialized (SQLite + JSONL event log)");
-                let state = ServerState::new_with_all(
+                let state = ServerState::new_with_all_and_memory(
                     rpc_api::provider_factory::build_provider_registry(config),
                     store.clone(),
                     ss,
                     rs,
                     Arc::new(es),
+                    memory_retriever,
                 );
                 // Reload existing sessions from store.
                 if let Some(session_store) = &state.session_store {

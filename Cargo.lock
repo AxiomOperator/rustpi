@@ -492,6 +492,7 @@ dependencies = [
  "config-core",
  "context-engine",
  "event-log",
+ "memory-sync",
  "model-adapters",
  "observability",
  "rpc-api",

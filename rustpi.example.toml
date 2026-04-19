@@ -1,0 +1,289 @@
+# rustpi.example.toml
+#
+# Copy this file to ~/.rustpi/config.toml and edit as needed.
+# All fields are optional unless marked REQUIRED.
+# Every section has sensible defaults, so you only need to add what you want to change.
+#
+# rustpi looks for config in this order (later values win):
+#   1. /etc/rustpi/config.toml
+#   2. ~/.rustpi/config.toml
+#   3. ./.rustpi/config.toml  (project-local override)
+#   4. --config <path> flag
+
+
+# =============================================================================
+# [global] — runtime-wide defaults
+# =============================================================================
+[global]
+
+# The provider to use when --provider is not passed on the CLI.
+# Must match one of the [[providers]] id values below.
+# If omitted and only one provider is configured, that provider is used.
+# If no providers are configured at all, the built-in echo provider is used.
+#
+# default_provider = "ollama"
+
+# The model to send to the selected provider when --model is not passed.
+# The provider decides what constitutes a valid model name.
+#
+# default_model = "llama3.2"
+
+# Hard cap on context-window tokens.  The context engine will truncate /
+# compact content to stay within this budget.  Leave unset to use the
+# provider's reported context window size (or 4 096 as a safe fallback).
+#
+# max_context_tokens = 8192
+
+# Minimum log level written to stderr / log file.
+# Values: trace | debug | info | warn | error
+# Can also be set via the RUST_LOG environment variable.
+#
+# log_level = "info"
+
+
+# =============================================================================
+# [[providers]] — one block per LLM backend
+# Repeat the entire block to register multiple providers.
+# =============================================================================
+
+# --- OpenAI ------------------------------------------------------------------
+#
+# [[providers]]
+# # Unique identifier used with --provider and default_provider.  (REQUIRED)
+# id   = "openai"
+#
+# # Backend type.  (REQUIRED)
+# # Values: openai_compatible | llama_cpp | vllm | github_copilot | gemini
+# kind = "openai_compatible"
+#
+# # Base URL for the API.  Defaults to https://api.openai.com/v1 for
+# # openai_compatible providers when omitted.
+# base_url = "https://api.openai.com/v1"
+#
+# # Authentication method for this provider.
+# [providers.auth]
+# # kind values: api_key | oauth_browser | device_code
+# kind    = "api_key"
+# # Name of the environment variable that holds the API key.
+# env_var = "OPENAI_API_KEY"
+
+
+# --- Ollama (local, OpenAI-compatible) ---------------------------------------
+#
+# [[providers]]
+# id       = "ollama"
+# kind     = "openai_compatible"
+# base_url = "http://localhost:11434/v1"
+# [providers.auth]
+# kind    = "api_key"
+# env_var = "OLLAMA_API_KEY"   # Ollama ignores the key; set to any non-empty value
+
+
+# --- llama.cpp server (local) ------------------------------------------------
+#
+# [[providers]]
+# id       = "llamacpp"
+# kind     = "llama_cpp"
+# base_url = "http://localhost:8080/v1"
+# [providers.auth]
+# kind    = "api_key"
+# env_var = "LLAMACPP_API_KEY"
+
+
+# --- vLLM (local or self-hosted) ---------------------------------------------
+#
+# [[providers]]
+# id       = "vllm"
+# kind     = "vllm"
+# base_url = "http://localhost:8000/v1"
+# [providers.auth]
+# kind    = "api_key"
+# env_var = "VLLM_API_KEY"
+
+
+# --- GitHub Copilot (device-code OAuth) --------------------------------------
+# Run `rustpi auth login` after adding this block to complete the OAuth flow.
+#
+# [[providers]]
+# id   = "copilot"
+# kind = "github_copilot"
+# [providers.auth]
+# kind = "device_code"
+
+
+# --- Any other OpenAI-compatible endpoint ------------------------------------
+# (LM Studio, Jan, Together AI, Groq, Mistral, Fireworks, Anyscale, etc.)
+#
+# [[providers]]
+# id       = "lmstudio"
+# kind     = "openai_compatible"
+# base_url = "http://localhost:1234/v1"
+# [providers.auth]
+# kind    = "api_key"
+# env_var = "LMSTUDIO_API_KEY"
+
+
+# =============================================================================
+# [memory] — session persistence and vector memory
+# =============================================================================
+[memory]
+
+# Storage backend for sessions, runs, and events.
+# Values: sqlite | sled | postgres
+# Default: sqlite  (database written to ~/.rustpi/sessions.db)
+#
+# session_backend = "sqlite"
+
+# PostgreSQL connection URL.  Required when session_backend = "postgres".
+# Example: "postgres://user:password@localhost:5432/rustpi"
+#
+# postgres_url = "postgres://rustpi:secret@localhost:5432/rustpi"
+
+# Enable Qdrant vector store for semantic long-term memory.
+# Requires a running Qdrant instance (https://qdrant.tech).
+#
+# qdrant_enabled = false
+# qdrant_url     = "http://localhost:6334"
+
+# Path to an Obsidian vault used as a personality / knowledge source.
+# When set, rustpi reads notes from the vault and injects them into
+# the system prompt as background context.
+#
+# obsidian_vault_path = "/home/you/Documents/notes"
+
+
+# =============================================================================
+# [user] — personal preferences (usually in ~/.rustpi/config.toml)
+# =============================================================================
+[user]
+
+# Preferred provider for interactive (TUI) sessions.
+# Falls back to [global].default_provider when unset.
+#
+# preferred_provider = "ollama"
+
+# Preferred model for interactive sessions.
+#
+# preferred_model = "llama3.2"
+
+# TUI color theme.  Built-in values: default | dark | light
+#
+# theme = "default"
+
+# External editor launched for multi-line prompt editing (e.g. via a hotkey).
+# Respects the EDITOR environment variable when unset.
+#
+# editor = "vim"
+
+
+# =============================================================================
+# [project] — project-local overrides (put in ./.rustpi/config.toml)
+# =============================================================================
+[project]
+
+# Human-readable project name shown in session lists and logs.
+#
+# project_name = "my-awesome-app"
+
+# Provider override for this project specifically.
+#
+# default_provider = "ollama"
+
+# Model override for this project specifically.
+#
+# default_model = "codellama:13b"
+
+# Allowlist of tool names the agent is permitted to call in this project.
+# When unset, the policy section governs which tools are allowed.
+# Example: ["read_file", "write_file", "run_shell"]
+#
+# allowed_tools = ["read_file", "write_file"]
+
+# Root directory the context engine scans for relevant files.
+# Defaults to the current working directory.
+#
+# context_root = "./src"
+
+
+# =============================================================================
+# [cli] — command-line interface behaviour
+# =============================================================================
+[cli]
+
+# Default output format for `rustpi run`.
+# Values: text | json | jsonl
+# Override per invocation with --output.
+#
+# output_format = "text"
+
+# Emit ANSI color codes in terminal output.
+# Set to false if piping output to tools that can't handle escape codes.
+#
+# color = true
+
+# Pipe long output through $PAGER (usually `less`).
+#
+# pager = true
+
+
+# =============================================================================
+# [tui] — terminal user interface settings
+# =============================================================================
+[tui]
+
+# Color theme for the TUI.  Same values as [user].theme.
+#
+# theme = "default"
+
+# Show a live token-count indicator in the TUI status bar.
+#
+# show_token_count = true
+
+# Soft-wrap long lines in the TUI message pane.
+#
+# wrap_lines = true
+
+
+# =============================================================================
+# [logging] — tracing / log output
+# =============================================================================
+[logging]
+
+# Minimum log level.
+# Values: trace | debug | info | warn | error
+# Also controlled by the RUST_LOG environment variable (env var takes precedence).
+#
+# level = "info"
+
+# Log output format.
+# Values: pretty (human-readable, colourised) | json (structured, one object per line)
+# Use json when forwarding logs to a log aggregator.
+#
+# format = "pretty"
+
+# Write logs to a file in addition to stderr.
+# The file is created if it does not exist; it is appended to on restart.
+#
+# file = "/var/log/rustpi/rustpi.log"
+
+
+# =============================================================================
+# [policy] — tool execution safety
+# =============================================================================
+[policy]
+
+# What to do when a tool is called and no specific rule matches.
+# Values: allow | deny
+# "allow" lets every tool run; "deny" blocks everything not explicitly permitted.
+#
+# default_tool_policy = "allow"
+
+# Pause and ask the user before the agent writes to any file.
+# Useful when you want to review diffs before they are applied.
+#
+# require_approval_for_file_writes = false
+
+# Pause and ask the user before the agent executes any shell command.
+# Strongly recommended when working with untrusted prompts.
+#
+# require_approval_for_shell_commands = false

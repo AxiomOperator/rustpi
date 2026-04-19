@@ -22,6 +22,7 @@ observability = { path = "../observability" }
 auth-core = { path = "../auth-core" }
 config-core = { path = "../config-core" }
 context-engine = { path = "../context-engine" }
+memory-sync = { path = "../memory-sync" }
 event-log = { path = "../event-log" }
 session-store = { path = "../session-store" }
 model-adapters = { path = "../model-adapters" }

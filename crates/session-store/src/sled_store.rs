@@ -36,6 +36,7 @@ fn str_to_status(s: &str) -> RunStatus {
 }
 
 /// Sled-backed store.
+#[allow(dead_code)]
 pub struct SledBackend {
     db: sled::Db,
     sessions: sled::Tree,

@@ -20,8 +20,8 @@ use qdrant_client::{Payload, Qdrant};
 use tracing::warn;
 use uuid::Uuid;
 
-pub const DEFAULT_COLLECTION: &str = "rustpi_memory";
-pub const DEFAULT_VECTOR_SIZE: u64 = 1536;
+pub const DEFAULT_COLLECTION: &str = "Default";
+pub const DEFAULT_VECTOR_SIZE: u64 = 512;
 
 /// Qdrant-backed memory store.
 pub struct QdrantMemory {
@@ -33,14 +33,23 @@ pub struct QdrantMemory {
 impl QdrantMemory {
     /// Create a new `QdrantMemory` connecting to `url`.
     ///
-    /// `collection` defaults to [`DEFAULT_COLLECTION`].
-    /// `vector_size` defaults to [`DEFAULT_VECTOR_SIZE`].
+    /// - `api_key` is required for Qdrant Cloud and any secured instance.
+    /// - `collection` defaults to [`DEFAULT_COLLECTION`] when `None`.
+    /// - `vector_size` defaults to [`DEFAULT_VECTOR_SIZE`] when `None`.
     pub fn new(
         url: &str,
+        api_key: Option<String>,
         collection: Option<String>,
         vector_size: Option<u64>,
     ) -> Result<Self, MemorySyncError> {
-        let client = Qdrant::from_url(url)
+        let mut builder = Qdrant::from_url(url);
+        if let Some(key) = api_key {
+            builder = builder.api_key(key);
+        }
+        // Suppress the version-compatibility check which prints to stdout and
+        // would corrupt JSON output when Qdrant is unreachable.
+        builder = builder.skip_compatibility_check();
+        let client = builder
             .build()
             .map_err(|e| MemorySyncError::Qdrant(e.to_string()))?;
         Ok(Self {

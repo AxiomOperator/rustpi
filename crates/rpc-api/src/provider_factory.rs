@@ -2,7 +2,7 @@
 
 use std::sync::Arc;
 
-use auth_core::{ApiKeyAuth, AuthFlow, AuthState, MemoryTokenStore};
+use auth_core::{ApiKeyAuth, AuthFlow, MemoryTokenStore};
 use auth_core::record::TokenRecord;
 use chrono::Utc;
 use config_core::model::{Config, ProviderAuthConfig, ProviderKind};

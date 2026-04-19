@@ -69,7 +69,14 @@ pub struct MemoryConfig {
     pub session_backend: SessionBackend,
     /// Whether to enable Qdrant vector memory.
     pub qdrant_enabled: bool,
+    /// Qdrant gRPC/HTTP endpoint URL.
     pub qdrant_url: Option<String>,
+    /// API key for authenticating with Qdrant (required for cloud/secured instances).
+    pub qdrant_api_key: Option<String>,
+    /// Qdrant collection name to store memory points in.
+    /// Defaults to "rustpi_memory" when unset.
+    pub qdrant_collection_name: Option<String>,
+    /// PostgreSQL connection URL (used when session_backend = "postgres").
     pub postgres_url: Option<String>,
 }
 

@@ -14,7 +14,7 @@ use memory_sync::MemorySyncError;
 fn qdrant_new_with_any_url_does_not_panic() {
     // A well-formed URL that points to a non-existent host; `new` only builds
     // the client object, so this should succeed without network I/O.
-    let result = QdrantMemory::new("http://127.0.0.1:19999", None, None);
+    let result = QdrantMemory::new("http://127.0.0.1:19999", None, None, None);
     // Drop to prove no panic at construction or drop.
     drop(result);
 }
@@ -24,6 +24,7 @@ fn qdrant_new_with_any_url_does_not_panic() {
 fn qdrant_new_custom_collection_and_vector_size_does_not_panic() {
     let result = QdrantMemory::new(
         "http://127.0.0.1:19999",
+        None,
         Some("custom_collection".to_string()),
         Some(768),
     );
@@ -38,7 +39,12 @@ fn qdrant_new_custom_collection_and_vector_size_does_not_panic() {
 /// `Err(MemorySyncError::Qdrant(_))`, not panic.
 #[tokio::test]
 async fn qdrant_ensure_collection_unavailable_server_returns_error() {
-    let qm = match QdrantMemory::new("http://127.0.0.1:19999", None, None) {
+    let qm = match QdrantMemory::new(
+        "http://127.0.0.1:19999",
+        None,
+        None,
+        None,
+    ) {
         Ok(q) => q,
         Err(e) => {
             eprintln!("QdrantMemory::new failed at construction (ok to skip): {e}");
@@ -60,7 +66,12 @@ async fn qdrant_ensure_collection_unavailable_server_returns_error() {
 /// `Err(MemorySyncError::Qdrant(_))`, not panic.
 #[tokio::test]
 async fn qdrant_upsert_unavailable_server_returns_error() {
-    let qm = match QdrantMemory::new("http://127.0.0.1:19999", None, None) {
+    let qm = match QdrantMemory::new(
+        "http://127.0.0.1:19999",
+        None,
+        None,
+        None,
+    ) {
         Ok(q) => q,
         Err(e) => {
             eprintln!("QdrantMemory::new failed at construction (ok to skip): {e}");
@@ -92,10 +103,11 @@ async fn qdrant_upsert_unavailable_server_returns_error() {
 async fn qdrant_live_ensure_upsert_search() {
     let url = std::env::var("QDRANT_URL")
         .unwrap_or_else(|_| "http://localhost:6334".to_string());
+    let api_key = std::env::var("QDRANT_API_KEY").ok();
 
     // Use a tiny vector size (4) for the test collection so no real embeddings
     // are required.
-    let qm = match QdrantMemory::new(&url, Some("rustpi_test_qdrant".to_string()), Some(4)) {
+    let qm = match QdrantMemory::new(&url, api_key, Some("rustpi_test_qdrant".to_string()), Some(4)) {
         Ok(q) => q,
         Err(e) => {
             eprintln!("skip: QdrantMemory::new failed: {e}");

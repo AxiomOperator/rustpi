@@ -309,7 +309,7 @@ where
         let sys_text = build_system_message().await;
 
         // 2. Build optional context from the working directory.
-        let context_text = build_context_messages(&prompt_str, &sid_clone).await;
+        let context_text = build_context_messages(&prompt_str, &sid_clone, Arc::clone(&state_clone.memory_retriever)).await;
 
         // 3. Assemble the message list: system prompt first, then optional context, then user.
         let mut messages: Vec<ChatMessage> = vec![ChatMessage {
@@ -887,12 +887,16 @@ async fn try_load_personality() -> Option<String> {
 
 /// Optionally build a system context string from the working directory.
 /// Returns `None` if the engine fails or finds nothing relevant — callers should continue without context.
-async fn build_context_messages(prompt: &str, _session_id: &SessionId) -> Option<String> {
+async fn build_context_messages(
+    prompt: &str,
+    _session_id: &SessionId,
+    memory: Arc<dyn context_engine::memory::MemoryRetriever>,
+) -> Option<String> {
     use context_engine::{ContextEngine, EngineConfig, RelevanceHints};
 
     let cwd = std::env::current_dir().ok()?;
     let config = EngineConfig::new(&cwd);
-    let engine = ContextEngine::new(config);
+    let engine = ContextEngine::new(config).with_memory(memory);
 
     let keywords = extract_keywords(prompt);
     let hints = RelevanceHints { keywords, referenced_paths: vec![], root: Some(cwd) };

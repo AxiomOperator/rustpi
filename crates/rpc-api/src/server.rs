@@ -9,6 +9,7 @@ use agent_core::run::Run;
 use agent_core::session::Session;
 use agent_core::types::{RunId, SessionId};
 use auth_core::{MemoryTokenStore, TokenStore};
+use context_engine::memory::{MemoryRetriever, NoopMemory};
 use policy_engine::PolicyEngine;
 use event_log::store::EventStore;
 use model_adapters::ProviderRegistry;
@@ -44,6 +45,8 @@ pub struct ServerState {
     pub event_store: Option<Arc<dyn EventStore>>,
     pub tool_runner: Arc<ToolRunner>,
     pub policy_engine: Arc<PolicyEngine>,
+    /// Optional semantic memory retriever (e.g. Qdrant).
+    pub memory_retriever: Arc<dyn MemoryRetriever>,
 }
 
 fn default_tool_runner() -> Arc<ToolRunner> {
@@ -82,6 +85,7 @@ impl ServerState {
             event_store: None,
             tool_runner: default_tool_runner(),
             policy_engine: Arc::new(PolicyEngine::default()),
+            memory_retriever: Arc::new(NoopMemory),
         })
     }
 
@@ -91,6 +95,17 @@ impl ServerState {
         session_store: Arc<dyn SessionStore>,
         run_store: Arc<dyn RunStore>,
         event_store: Arc<dyn EventStore>,
+    ) -> Arc<Self> {
+        Self::new_with_all_and_memory(registry, token_store, session_store, run_store, event_store, Arc::new(NoopMemory))
+    }
+
+    pub fn new_with_all_and_memory(
+        registry: ProviderRegistry,
+        token_store: Arc<dyn TokenStore>,
+        session_store: Arc<dyn SessionStore>,
+        run_store: Arc<dyn RunStore>,
+        event_store: Arc<dyn EventStore>,
+        memory_retriever: Arc<dyn MemoryRetriever>,
     ) -> Arc<Self> {
         let state = Arc::new(Self {
             sessions: Mutex::new(HashMap::new()),
@@ -105,6 +120,7 @@ impl ServerState {
             event_store: Some(event_store.clone()),
             tool_runner: default_tool_runner(),
             policy_engine: Arc::new(PolicyEngine::default()),
+            memory_retriever,
         });
 
         // Spawn background task to persist events from the event bus.
