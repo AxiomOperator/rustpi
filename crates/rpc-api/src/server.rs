@@ -8,6 +8,21 @@ use agent_core::bus::EventBus;
 use agent_core::run::Run;
 use agent_core::session::Session;
 use agent_core::types::{RunId, SessionId};
+use auth_core::{MemoryTokenStore, TokenStore};
+use policy_engine::PolicyEngine;
+use event_log::store::EventStore;
+use model_adapters::ProviderRegistry;
+use session_store::store::{RunStore, SessionStore};
+use tool_runtime::{
+    path_safety::PathSafetyPolicy,
+    registry::ToolRegistry,
+    runner::ToolRunner,
+    tools::{
+        edit::EditTool,
+        file::{ReadFileTool, WriteFileTool},
+        shell::ShellTool,
+    },
+};
 use tokio_util::sync::CancellationToken;
 
 use crate::dispatch;
@@ -22,17 +37,88 @@ pub struct ServerState {
     pub event_bus: EventBus,
     pub next_seq: AtomicU64,
     pub cancel_tokens: Mutex<HashMap<RunId, CancellationToken>>,
+    pub provider_registry: Arc<ProviderRegistry>,
+    pub token_store: Arc<dyn TokenStore>,
+    pub session_store: Option<Arc<dyn SessionStore>>,
+    pub run_store: Option<Arc<dyn RunStore>>,
+    pub event_store: Option<Arc<dyn EventStore>>,
+    pub tool_runner: Arc<ToolRunner>,
+    pub policy_engine: Arc<PolicyEngine>,
+}
+
+fn default_tool_runner() -> Arc<ToolRunner> {
+    let policy = Arc::new(PathSafetyPolicy::allow_all());
+    let mut registry = ToolRegistry::default();
+    registry.register(Arc::new(ShellTool::new()));
+    registry.register(Arc::new(ReadFileTool::new(Arc::clone(&policy))));
+    registry.register(Arc::new(WriteFileTool::new(Arc::clone(&policy))));
+    registry.register(Arc::new(EditTool::new(Arc::clone(&policy))));
+    Arc::new(ToolRunner::new(Arc::new(registry), std::time::Duration::from_secs(30)))
 }
 
 impl ServerState {
     pub fn new() -> Arc<Self> {
+        Self::with_registry(ProviderRegistry::new())
+    }
+
+    pub fn with_registry(registry: ProviderRegistry) -> Arc<Self> {
+        Self::with_registry_and_store(registry, Arc::new(MemoryTokenStore::new()))
+    }
+
+    pub fn with_registry_and_store(
+        registry: ProviderRegistry,
+        token_store: Arc<dyn TokenStore>,
+    ) -> Arc<Self> {
         Arc::new(Self {
             sessions: Mutex::new(HashMap::new()),
             runs: Mutex::new(HashMap::new()),
             event_bus: EventBus::new(),
             next_seq: AtomicU64::new(0),
             cancel_tokens: Mutex::new(HashMap::new()),
+            provider_registry: Arc::new(registry),
+            token_store,
+            session_store: None,
+            run_store: None,
+            event_store: None,
+            tool_runner: default_tool_runner(),
+            policy_engine: Arc::new(PolicyEngine::default()),
         })
+    }
+
+    pub fn new_with_all(
+        registry: ProviderRegistry,
+        token_store: Arc<dyn TokenStore>,
+        session_store: Arc<dyn SessionStore>,
+        run_store: Arc<dyn RunStore>,
+        event_store: Arc<dyn EventStore>,
+    ) -> Arc<Self> {
+        let state = Arc::new(Self {
+            sessions: Mutex::new(HashMap::new()),
+            runs: Mutex::new(HashMap::new()),
+            event_bus: EventBus::new(),
+            next_seq: AtomicU64::new(0),
+            cancel_tokens: Mutex::new(HashMap::new()),
+            provider_registry: Arc::new(registry),
+            token_store,
+            session_store: Some(session_store),
+            run_store: Some(run_store),
+            event_store: Some(event_store.clone()),
+            tool_runner: default_tool_runner(),
+            policy_engine: Arc::new(PolicyEngine::default()),
+        });
+
+        // Spawn background task to persist events from the event bus.
+        let event_store_bg = event_store;
+        let mut bus_rx = state.event_bus.subscribe();
+        tokio::spawn(async move {
+            while let Ok(event) = bus_rx.recv().await {
+                if let Err(e) = event_store_bg.append(&event).await {
+                    tracing::warn!("event persistence failed: {}", e);
+                }
+            }
+        });
+
+        state
     }
 }
 
@@ -53,6 +139,15 @@ where
             reader: LineReader::new(reader),
             writer: LineWriter::new(writer),
             state: ServerState::new(),
+        }
+    }
+
+    /// Build a server using a pre-constructed [`ServerState`] (e.g. for tests with mock providers).
+    pub fn with_state(state: Arc<ServerState>, reader: R, writer: W) -> Self {
+        Self {
+            reader: LineReader::new(reader),
+            writer: LineWriter::new(writer),
+            state,
         }
     }
 

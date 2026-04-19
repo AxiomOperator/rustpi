@@ -6,6 +6,15 @@ description = "stdin/stdout JSONL RPC protocol for machine-to-machine agent cont
 
 [dependencies]
 agent-core = { path = "../agent-core" }
+session-store = { path = "../session-store" }
+event-log = { path = "../event-log" }
+model-adapters = { path = "../model-adapters" }
+tool-runtime = { path = "../tool-runtime" }
+auth-core = { path = "../auth-core" }
+config-core = { path = "../config-core" }
+policy-engine = { path = "../policy-engine" }
+context-engine = { path = "../context-engine" }
+memory-sync = { path = "../memory-sync" }
 serde = { workspace = true }
 serde_json = { workspace = true }
 thiserror = { workspace = true }
