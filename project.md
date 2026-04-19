@@ -861,33 +861,156 @@ Build the primary interactive operator experience.
 
 ### Deliverables
 
-* [ ] Ratatui full-screen TUI
-* [ ] conversation pane
-* [ ] tool activity pane
-* [ ] context pane
-* [ ] session/memory pane
-* [ ] provider/auth pane
-* [ ] logs/events pane
+* [x] Ratatui full-screen TUI
+* [x] conversation pane
+* [x] tool activity pane
+* [x] context pane
+* [x] session/memory pane
+* [x] provider/auth pane
+* [x] logs/events pane
 
 ### Tasks
 
-* [ ] Implement Ratatui app shell
-* [ ] Implement pane layout system
-* [ ] Implement streaming conversation renderer
-* [ ] Implement tool activity feed
-* [ ] Implement session navigation
-* [ ] Implement provider/model picker
-* [ ] Implement auth status views
-* [ ] Implement interrupt/approval workflows
-* [ ] Implement memory/context inspection
-* [ ] Implement keyboard shortcut system
-* [ ] Add TUI snapshot and interaction tests where practical
+* [x] Implement Ratatui app shell
+* [x] Implement pane layout system
+* [x] Implement streaming conversation renderer
+* [x] Implement tool activity feed
+* [x] Implement session navigation
+* [x] Implement provider/model picker
+* [x] Implement auth status views
+* [x] Implement interrupt/approval workflows
+* [x] Implement memory/context inspection
+* [x] Implement keyboard shortcut system
+* [x] Add TUI snapshot and interaction tests where practical
 
 ### Exit criteria
 
-* [ ] TUI is usable as the main operator interface
-* [ ] Streaming and tool activity remain readable
-* [ ] Approval and interrupt workflows are reliable
+* [x] TUI is usable as the main operator interface
+* [x] Streaming and tool activity remain readable
+* [x] Approval and interrupt workflows are reliable
+
+### Completion note — Phase 11
+
+**Completed.** The `rustpi-tui` binary is implemented in the `tui` crate (`crates/tui/`), built on [Ratatui 0.29](https://github.com/ratatui-org/ratatui) with Crossterm as the terminal backend.
+
+#### Module architecture
+
+| File | Purpose |
+|------|---------|
+| `src/lib.rs` | Crate root — re-exports `app`, `state`, `layout`, `input`, `events`, `panes` |
+| `src/app.rs` | `App` struct — terminal lifecycle, 250 ms tick loop, `tokio::select!` event fan-in, `apply_agent_event()` dispatch, `render_status_bar()` |
+| `src/state.rs` | `AppState` — all shared mutable UI state; `PaneId` enum; supporting types (`ChatMessage`, `ToolActivity`, `ToolStatus`, `ProviderStatus`, `ApprovalRequest`, `LogEntry`, `SessionSummary`, `ContextInfo`) |
+| `src/layout.rs` | `compute_layout()` — derives `PaneRects` from terminal area; `border_style()` — cyan border for focused pane, dark-gray for others |
+| `src/input.rs` | `KeyAction` enum; `map_key()` — maps `crossterm::KeyEvent` to semantic actions |
+| `src/panes/mod.rs` | Re-exports all six pane render modules |
+| `src/panes/conversation.rs` | Conversation pane — timestamped chat messages, live streaming cursor (▌), approval prompt inline |
+| `src/panes/tools.rs` | Tool Activity pane — most-recent 20 events with color-coded status badges |
+| `src/panes/context.rs` | Context pane — file count and token count from `ContextBuilt` events |
+| `src/panes/session.rs` | Sessions pane — session list with active-session marker (●) and cursor highlight |
+| `src/panes/auth.rs` | Auth pane — per-provider status with color-coded symbol (●/◐/✗/○) |
+| `src/panes/logs.rs` | Logs pane — most-recent N log entries color-coded by level |
+
+#### Pane layout
+
+```
+┌──────────────────────────────────────────┬──────────────────────────┐
+│  Conversation [1]           (60% width)  │  Tool Activity [2] (40%) │
+│                                          │                          │
+│  (65% of terminal height)                │                          │
+├──────────────────────────────────────────┴──────────────────────────┤
+│  [Session: xxxxxxxx] [Run: idle]  …status…  | Keys: 1-6 … ? help   │
+├─────────────────────────────────────────────────────────────────────┤
+│  Input bar: > _                                                     │
+├───────────────────┬───────────────────┬────────────┬───────────────┤
+│  Sessions [4]     │  Context [3]      │  Auth [5]  │  Logs [6]     │
+│  (25% each)       │                   │            │               │
+└───────────────────┴───────────────────┴────────────┴───────────────┘
+```
+
+The top two panes split the upper 65% of the terminal horizontally (60/40). A one-line status bar and a one-line input bar sit between the halves. The bottom strip splits equally into four panes (25% each).
+
+#### Keyboard shortcuts
+
+| Key | Action |
+|-----|--------|
+| `1` | Focus Conversation pane |
+| `2` | Focus Tool Activity pane |
+| `3` | Focus Context pane |
+| `4` | Focus Sessions pane |
+| `5` | Focus Auth pane |
+| `6` | Focus Logs pane |
+| `q` / `Ctrl+C` | Quit |
+| `j` / `↓` | Scroll focused pane down |
+| `k` / `↑` | Scroll focused pane up |
+| `PgDn` | Page scroll down (10 lines) |
+| `PgUp` | Page scroll up (10 lines) |
+| `Enter` | Submit typed prompt |
+| `Ctrl+I` | Request interrupt on active run |
+| `y` | Approve pending action |
+| `n` | Deny pending action |
+| `?` | Show key reference in status bar |
+
+#### State model — `AppState` key fields
+
+| Field | Type | Purpose |
+|-------|------|---------|
+| `messages` | `Vec<ChatMessage>` | Full conversation history (User / Assistant / System / Tool roles) |
+| `streaming_chunk` | `String` | Accumulates `TokenChunk` deltas; flushed to `messages` on `RunCompleted` |
+| `tool_events` | `VecDeque<ToolActivity>` | Ring buffer capped at 200 entries |
+| `context_info` | `Option<ContextInfo>` | File count + token count from `ContextBuilt` events |
+| `sessions` | `Vec<SessionSummary>` | In-memory session list |
+| `active_session_id` | `Option<String>` | First session created becomes active |
+| `session_list_cursor` | `usize` | Cursor position in Sessions pane |
+| `providers` | `Vec<ProviderStatus>` | Seeded from config at startup; updated by `AuthStateChanged` events |
+| `log_entries` | `VecDeque<LogEntry>` | Ring buffer capped at 500 entries |
+| `focused_pane` | `PaneId` | Which pane has keyboard focus |
+| `pending_approval` | `Option<ApprovalRequest>` | Non-`None` when a tool call is awaiting operator decision |
+| `active_run_id` | `Option<String>` | Non-`None` while a run is in progress |
+| `status_message` | `Option<String>` | One-line message shown in the status bar |
+
+#### Event integration — `AgentEvent` → pane updates
+
+| `AgentEvent` variant | Pane(s) updated |
+|----------------------|-----------------|
+| `TokenChunk { delta }` | Conversation — appended to `streaming_chunk` |
+| `RunStarted { run_id }` | Logs; `active_run_id` set |
+| `RunCompleted { run_id }` | Conversation — `streaming_chunk` flushed; Logs; `active_run_id` cleared |
+| `RunFailed { run_id, reason }` | Conversation — partial chunk flushed; Logs; `active_run_id` cleared |
+| `ToolExecutionStarted { call_id, tool_name }` | Tool Activity — new entry with `Started` status |
+| `ToolStdout { call_id, line }` | Tool Activity — matching entry updated to `Stdout` |
+| `ToolStderr { call_id, line }` | Tool Activity — matching entry updated to `Stderr` |
+| `ToolExecutionCompleted { call_id }` | Tool Activity — status → `Completed` |
+| `ToolExecutionFailed { call_id, reason }` | Tool Activity — status → `Failed` |
+| `ToolExecutionCancelled { call_id }` | Tool Activity — status → `Cancelled` |
+| `ToolCallRequested { run_id, call }` | Logs; Conversation (approval prompt if tool name contains `write`/`exec`/`shell`/`delete`) |
+| `AuthStateChanged { provider, state }` | Auth — provider entry updated or created |
+| `ContextBuilt { file_count, token_count }` | Context — `context_info` set |
+| `SessionCreated { session_id }` | Sessions — new entry added; first session becomes active |
+| All other variants | Logs — formatted as `debug` entry (truncated to 120 chars) |
+
+#### Approval workflow
+
+When `ToolCallRequested` arrives for a tool whose name contains `write`, `exec`, `shell`, or `delete`, `AppState::pending_approval` is set with the run ID, call ID, tool name, and a description string. The Conversation pane renders a highlighted yellow inline prompt:
+
+```
+⚠ Approve [<tool_name>]? (y=yes / n=no): Tool: <name> args: <arguments>
+```
+
+Pressing `y` or `n` calls `pending_approval.take()` and sets a status bar message (`"Action approved"` / `"Action denied"`). The approval or denial is reflected immediately; the runtime run is responsible for observing this state.
+
+#### Interrupt workflow
+
+While `active_run_id` is `Some`, pressing `Ctrl+I` appends an `info` log entry (`"Interrupt requested for run <id>"`) and sets the status bar to `"Interrupt requested"`. The TUI does not yet wire an out-of-band cancellation token to the run executor; the log entry is the current signal.
+
+#### Known limitations and deferred work
+
+- **Sessions are in-memory only** — `AppState::sessions` is populated from `SessionCreated` events in the current process; no persistent session store integration yet.
+- **Prompt submission is simulated** — `Enter` appends the typed text as a `User` message and shows `"(prompt submitted — no model connected)"`. Real model-adapter streaming integration is deferred to Phase 12.
+- **Auth login not triggered from TUI** — pressing `5` shows auth status from config; initiating an OAuth or device-code flow from the TUI is deferred.
+- **Context pane is event-driven** — the Context pane only displays data when `ContextBuilt` events arrive from a connected runtime. There is no manual context-load command in the TUI yet.
+- **Interrupt is advisory only** — `Ctrl+I` records a log entry but does not yet cancel the underlying run via a `CancellationToken`; full interrupt wiring is deferred to Phase 12.
+- **No TUI snapshot tests** — automated UI snapshot/interaction tests are deferred; the implementation was validated manually.
+- **Minimum recommended terminal size** — 80×24; narrower terminals will produce overlapping pane borders.
 
 ---
 

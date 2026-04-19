@@ -1,8 +1,11 @@
 warning: /home/administrator/rustpi/crates/config-core/Cargo.toml: version requirement `1.1.2+spec-1.1.0` for dependency `toml` includes semver metadata which will be ignored, removing the metadata is recommended to avoid confusion
-   0.159437043s  INFO prepare_target{force=false package_id=cli v0.1.0 (/home/administrator/rustpi/crates/cli) target="cli"}: cargo::core::compiler::fingerprint: fingerprint dirty for cli v0.1.0 (/home/administrator/rustpi/crates/cli)/Check { test: false }/TargetInner { ..: lib_target("cli", ["lib"], "/home/administrator/rustpi/crates/cli/src/lib.rs", Edition2021) }
-   0.159452771s  INFO prepare_target{force=false package_id=cli v0.1.0 (/home/administrator/rustpi/crates/cli) target="cli"}: cargo::core::compiler::fingerprint:     dirty: TargetConfigurationChanged
-   0.161149586s  INFO prepare_target{force=false package_id=cli v0.1.0 (/home/administrator/rustpi/crates/cli) target="cli"}: cargo::core::compiler::fingerprint: fingerprint error for cli v0.1.0 (/home/administrator/rustpi/crates/cli)/Check { test: true }/TargetInner { ..: lib_target("cli", ["lib"], "/home/administrator/rustpi/crates/cli/src/lib.rs", Edition2021) }
-   0.161159618s  INFO prepare_target{force=false package_id=cli v0.1.0 (/home/administrator/rustpi/crates/cli) target="cli"}: cargo::core::compiler::fingerprint:     err: failed to read `/home/administrator/rustpi/target/debug/.fingerprint/cli-9358f1c06dbf0934/test-lib-cli`
+   0.184600999s  INFO prepare_target{force=false package_id=tui v0.1.0 (/home/administrator/rustpi/crates/tui) target="tui"}: cargo::core::compiler::fingerprint: stale: changed "/home/administrator/rustpi/crates/tui/src/app.rs"
+   0.184629196s  INFO prepare_target{force=false package_id=tui v0.1.0 (/home/administrator/rustpi/crates/tui) target="tui"}: cargo::core::compiler::fingerprint:           (vs) "/home/administrator/rustpi/target/debug/.fingerprint/tui-93bf47e3965255d5/dep-lib-tui"
+   0.184632686s  INFO prepare_target{force=false package_id=tui v0.1.0 (/home/administrator/rustpi/crates/tui) target="tui"}: cargo::core::compiler::fingerprint:                FileTime { seconds: 1776562414, nanos: 979422379 } < FileTime { seconds: 1776562577, nanos: 484957348 }
+   0.184713153s  INFO prepare_target{force=false package_id=tui v0.1.0 (/home/administrator/rustpi/crates/tui) target="tui"}: cargo::core::compiler::fingerprint: fingerprint dirty for tui v0.1.0 (/home/administrator/rustpi/crates/tui)/Check { test: false }/TargetInner { name_inferred: true, ..: lib_target("tui", ["lib"], "/home/administrator/rustpi/crates/tui/src/lib.rs", Edition2021) }
+   0.184723815s  INFO prepare_target{force=false package_id=tui v0.1.0 (/home/administrator/rustpi/crates/tui) target="tui"}: cargo::core::compiler::fingerprint:     dirty: FsStatusOutdated(StaleItem(ChangedFile { reference: "/home/administrator/rustpi/target/debug/.fingerprint/tui-93bf47e3965255d5/dep-lib-tui", reference_mtime: FileTime { seconds: 1776562414, nanos: 979422379 }, stale: "/home/administrator/rustpi/crates/tui/src/app.rs", stale_mtime: FileTime { seconds: 1776562577, nanos: 484957348 } }))
+   0.186323803s  INFO prepare_target{force=false package_id=tui v0.1.0 (/home/administrator/rustpi/crates/tui) target="tui"}: cargo::core::compiler::fingerprint: fingerprint error for tui v0.1.0 (/home/administrator/rustpi/crates/tui)/Check { test: true }/TargetInner { name_inferred: true, ..: lib_target("tui", ["lib"], "/home/administrator/rustpi/crates/tui/src/lib.rs", Edition2021) }
+   0.186334483s  INFO prepare_target{force=false package_id=tui v0.1.0 (/home/administrator/rustpi/crates/tui) target="tui"}: cargo::core::compiler::fingerprint:     err: failed to read `/home/administrator/rustpi/target/debug/.fingerprint/tui-8d9366ddf9848b10/test-lib-tui`
 
 Caused by:
     No such file or directory (os error 2)
@@ -44,13 +47,10 @@ Stack backtrace:
   24: <unknown>
   25: __libc_start_main
   26: <unknown>
-   0.167013171s  INFO prepare_target{force=false package_id=cli v0.1.0 (/home/administrator/rustpi/crates/cli) target="rustpi"}: cargo::core::compiler::fingerprint: stale: changed "/home/administrator/rustpi/crates/cli/src/main.rs"
-   0.167019737s  INFO prepare_target{force=false package_id=cli v0.1.0 (/home/administrator/rustpi/crates/cli) target="rustpi"}: cargo::core::compiler::fingerprint:           (vs) "/home/administrator/rustpi/target/debug/.fingerprint/cli-16bd76955108158c/dep-bin-rustpi"
-   0.167022298s  INFO prepare_target{force=false package_id=cli v0.1.0 (/home/administrator/rustpi/crates/cli) target="rustpi"}: cargo::core::compiler::fingerprint:                FileTime { seconds: 1776561746, nanos: 538175364 } < FileTime { seconds: 1776561779, nanos: 314809813 }
-   0.167068241s  INFO prepare_target{force=false package_id=cli v0.1.0 (/home/administrator/rustpi/crates/cli) target="rustpi"}: cargo::core::compiler::fingerprint: fingerprint dirty for cli v0.1.0 (/home/administrator/rustpi/crates/cli)/Check { test: false }/TargetInner { name: "rustpi", doc: true, ..: with_path("/home/administrator/rustpi/crates/cli/src/main.rs", Edition2021) }
-   0.167076207s  INFO prepare_target{force=false package_id=cli v0.1.0 (/home/administrator/rustpi/crates/cli) target="rustpi"}: cargo::core::compiler::fingerprint:     dirty: UnitDependencyInfoChanged { unit: UnitIndex(57) }
-   0.167803333s  INFO prepare_target{force=false package_id=cli v0.1.0 (/home/administrator/rustpi/crates/cli) target="rustpi"}: cargo::core::compiler::fingerprint: fingerprint error for cli v0.1.0 (/home/administrator/rustpi/crates/cli)/Check { test: true }/TargetInner { name: "rustpi", doc: true, ..: with_path("/home/administrator/rustpi/crates/cli/src/main.rs", Edition2021) }
-   0.167828894s  INFO prepare_target{force=false package_id=cli v0.1.0 (/home/administrator/rustpi/crates/cli) target="rustpi"}: cargo::core::compiler::fingerprint:     err: failed to read `/home/administrator/rustpi/target/debug/.fingerprint/cli-3887b8cb562ec302/test-bin-rustpi`
+   0.192941874s  INFO prepare_target{force=false package_id=tui v0.1.0 (/home/administrator/rustpi/crates/tui) target="rustpi-tui"}: cargo::core::compiler::fingerprint: fingerprint dirty for tui v0.1.0 (/home/administrator/rustpi/crates/tui)/Check { test: false }/TargetInner { name: "rustpi-tui", doc: true, ..: with_path("/home/administrator/rustpi/crates/tui/src/main.rs", Edition2021) }
+   0.192953599s  INFO prepare_target{force=false package_id=tui v0.1.0 (/home/administrator/rustpi/crates/tui) target="rustpi-tui"}: cargo::core::compiler::fingerprint:     dirty: FsStatusOutdated(StaleDepFingerprint { unit: UnitIndex(484) })
+   0.193604096s  INFO prepare_target{force=false package_id=tui v0.1.0 (/home/administrator/rustpi/crates/tui) target="rustpi-tui"}: cargo::core::compiler::fingerprint: fingerprint error for tui v0.1.0 (/home/administrator/rustpi/crates/tui)/Check { test: true }/TargetInner { name: "rustpi-tui", doc: true, ..: with_path("/home/administrator/rustpi/crates/tui/src/main.rs", Edition2021) }
+   0.193614127s  INFO prepare_target{force=false package_id=tui v0.1.0 (/home/administrator/rustpi/crates/tui) target="rustpi-tui"}: cargo::core::compiler::fingerprint:     err: failed to read `/home/administrator/rustpi/target/debug/.fingerprint/tui-514a8e08f44bdc83/test-bin-rustpi-tui`
 
 Caused by:
     No such file or directory (os error 2)
@@ -92,8 +92,8 @@ Stack backtrace:
   24: <unknown>
   25: __libc_start_main
   26: <unknown>
-   0.168442729s  INFO prepare_target{force=false package_id=cli v0.1.0 (/home/administrator/rustpi/crates/cli) target="cli_tests"}: cargo::core::compiler::fingerprint: fingerprint error for cli v0.1.0 (/home/administrator/rustpi/crates/cli)/Check { test: true }/TargetInner { kind: "test", name: "cli_tests", benched: false, ..: with_path("/home/administrator/rustpi/crates/cli/tests/cli_tests.rs", Edition2021) }
-   0.168452789s  INFO prepare_target{force=false package_id=cli v0.1.0 (/home/administrator/rustpi/crates/cli) target="cli_tests"}: cargo::core::compiler::fingerprint:     err: failed to read `/home/administrator/rustpi/target/debug/.fingerprint/cli-9d09a326effccc81/test-integration-test-cli_tests`
+   0.194392449s  INFO prepare_target{force=false package_id=tui v0.1.0 (/home/administrator/rustpi/crates/tui) target="tui_tests"}: cargo::core::compiler::fingerprint: fingerprint error for tui v0.1.0 (/home/administrator/rustpi/crates/tui)/Check { test: true }/TargetInner { kind: "test", name: "tui_tests", benched: false, ..: with_path("/home/administrator/rustpi/crates/tui/tests/tui_tests.rs", Edition2021) }
+   0.194401972s  INFO prepare_target{force=false package_id=tui v0.1.0 (/home/administrator/rustpi/crates/tui) target="tui_tests"}: cargo::core::compiler::fingerprint:     err: failed to read `/home/administrator/rustpi/target/debug/.fingerprint/tui-13a92834d549f20d/test-integration-test-tui_tests`
 
 Caused by:
     No such file or directory (os error 2)
@@ -135,5 +135,5 @@ Stack backtrace:
   24: <unknown>
   25: __libc_start_main
   26: <unknown>
-    Checking cli v0.1.0 (/home/administrator/rustpi/crates/cli)
-    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.51s
+    Checking tui v0.1.0 (/home/administrator/rustpi/crates/tui)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.48s

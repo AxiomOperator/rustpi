@@ -2,7 +2,7 @@
 
 A native Rust AI agent platform with multi-provider model access, durable sessions, Obsidian-backed local-first memory, and a rich terminal UI.
 
-**Status: Phases 0–10 complete — CLI live**
+**Status: Phases 0–11 complete — TUI live**
 
 ---
 
@@ -55,7 +55,7 @@ session-store   event-log    config-core
 | `memory-sync` | Qdrant semantic memory (`QdrantMemory`); Obsidian vault reader/writer, canonical docs, personality loader, sync engine | ✅ Phase 8 |
 | `rpc-api` | stdin/stdout JSONL RPC server — session attach/detach, run start/cancel, auth status, capabilities | ✅ Phase 9 |
 | `cli` | Scriptable CLI binary (`rustpi`) | ✅ Phase 10 |
-| `tui` | Ratatui full-screen TUI binary (`rustpi-tui`) | 🔧 Phase 11 |
+| `tui` | Ratatui full-screen TUI binary (`rustpi-tui`) | ✅ Phase 11 |
 
 ---
 
@@ -946,6 +946,86 @@ This flag is intended for CI pipelines and scripted automation.
 
 ---
 
+## TUI
+
+The `rustpi-tui` binary is a full-screen terminal UI built on [Ratatui 0.29](https://github.com/ratatui-org/ratatui) + Crossterm. It connects to the shared `ServerState` event bus and renders live agent activity without blocking the runtime.
+
+### Launch
+
+```sh
+cargo run -p tui        # development
+cargo install --path crates/tui && rustpi-tui   # installed
+```
+
+### Layout
+
+```
+┌──────────────────────────────────────────┬──────────────────────────┐
+│  Conversation [1]           (60% width)  │  Tool Activity [2] (40%) │
+│                                          │                          │
+│              (upper 65% of terminal)     │                          │
+├──────────────────────────────────────────┴──────────────────────────┤
+│  [Session: xxxxxxxx] [Run: idle]  …status…  | Keys: 1-6 … ? help   │
+├─────────────────────────────────────────────────────────────────────┤
+│  Input bar: > _                                                     │
+├───────────────────┬───────────────────┬────────────┬───────────────┤
+│  Sessions [4]     │  Context [3]      │  Auth [5]  │  Logs [6]     │
+│  (25% each)                                                        │
+└───────────────────┴───────────────────┴────────────┴───────────────┘
+```
+
+### Panes
+
+| Pane | Key | Description |
+|------|-----|-------------|
+| Conversation | `1` | Live chat log with role-colored lines, streaming token cursor (▌), and inline approval prompts |
+| Tool Activity | `2` | Tool lifecycle events — started / stdout / stderr / done / failed / cancelled; most-recent 20 entries |
+| Context | `3` | File count and token budget info populated by `ContextBuilt` events |
+| Sessions | `4` | Session list with active-session marker (●) and scrollable cursor |
+| Auth | `5` | Per-provider auth status — color-coded: ● authenticated · ◐ pending · ✗ expired/failed · ○ unauthenticated |
+| Logs | `6` | Runtime log ring buffer (capped at 500 entries), color-coded by level |
+
+### Keyboard shortcuts
+
+| Key | Action |
+|-----|--------|
+| `1`–`6` | Focus pane |
+| `q` / `Ctrl+C` | Quit |
+| `j` / `↓` | Scroll focused pane down |
+| `k` / `↑` | Scroll focused pane up |
+| `PgDn` | Page scroll down (10 lines) |
+| `PgUp` | Page scroll up (10 lines) |
+| `Enter` | Submit typed prompt |
+| `Ctrl+I` | Request interrupt on active run |
+| `y` | Approve pending action |
+| `n` | Deny pending action |
+| `?` | Show key reference in status bar |
+
+### Approval workflow
+
+When the agent requests a tool call whose name contains `write`, `exec`, `shell`, or `delete`, the Conversation pane renders a highlighted inline prompt:
+
+```
+⚠ Approve [<tool_name>]? (y=yes / n=no): Tool: <name> args: <arguments>
+```
+
+Press `y` to approve or `n` to deny. The decision is reflected immediately in the status bar (`"Action approved"` / `"Action denied"`) and the `pending_approval` state is cleared.
+
+### Interrupt workflow
+
+While a run is active (`[Run: active]` in the status bar), press `Ctrl+I` to request an interrupt. A log entry is written (`"Interrupt requested for run <id>"`) and the status bar updates to `"Interrupt requested"`. Full run cancellation wiring is deferred to Phase 12.
+
+### Limitations
+
+- Sessions are in-memory — not persisted between TUI restarts.
+- Prompt submission appends a User message locally; real model streaming integration is deferred to Phase 12.
+- Auth login flow cannot be initiated from the TUI yet (shows status only).
+- Context pane populates only when `ContextBuilt` events arrive from a connected runtime.
+- Interrupt is advisory — `Ctrl+I` logs the intent but does not yet send a cancellation token to the executor.
+- Minimum recommended terminal size: **80×24**.
+
+---
+
 ## Development status
 
 | Phase | Title | Status |
@@ -961,7 +1041,7 @@ This flag is intended for CI pipelines and scripted automation.
 | 8 | Obsidian vault memory and personality system | ✅ Complete |
 | 9 | RPC API | ✅ Complete |
 | 10 | CLI | ✅ Complete |
-| 11 | Ratatui TUI | 🔲 Planned |
+| 11 | Ratatui TUI | ✅ Complete |
 | 12 | Observability, replay, and reliability hardening | 🔲 Planned |
 | 13 | Security hardening | 🔲 Planned |
 | 14 | Full-system testing and parity validation | 🔲 Planned |
