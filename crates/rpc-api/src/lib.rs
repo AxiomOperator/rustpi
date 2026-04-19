@@ -12,12 +12,13 @@ pub mod dispatch;
 pub mod error;
 pub mod normalize;
 pub mod protocol;
+pub mod provider_factory;
 pub mod server;
 pub mod transport;
 
 pub use error::RpcError;
 pub use protocol::*;
-pub use server::RpcServer;
+pub use server::{RpcServer, ServerState};
 pub use transport::{LineReader, LineWriter};
 
 /// Build an `RpcServer` reading from stdin and writing to stdout.

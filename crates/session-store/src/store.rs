@@ -38,6 +38,8 @@ pub enum RunStatus {
 #[async_trait]
 pub trait SessionStore: Send + Sync {
     async fn create_session(&self) -> Result<SessionRecord, StoreError>;
+    /// Persist a session with a specific ID already assigned by the runtime.
+    async fn insert_session_record(&self, id: &SessionId) -> Result<SessionRecord, StoreError>;
     async fn get_session(&self, id: &SessionId) -> Result<SessionRecord, StoreError>;
     async fn list_sessions(&self) -> Result<Vec<SessionRecord>, StoreError>;
     async fn update_summary(&self, id: &SessionId, summary: &str) -> Result<(), StoreError>;
@@ -49,6 +51,12 @@ pub trait SessionStore: Send + Sync {
 pub trait RunStore: Send + Sync {
     async fn create_run(
         &self,
+        session_id: SessionId,
+    ) -> Result<RunRecord, StoreError>;
+    /// Persist a run with specific IDs already assigned by the runtime.
+    async fn insert_run_record(
+        &self,
+        id: &RunId,
         session_id: SessionId,
     ) -> Result<RunRecord, StoreError>;
     async fn get_run(&self, id: &RunId) -> Result<RunRecord, StoreError>;

@@ -121,6 +121,24 @@ impl SessionStore for PostgresBackend {
         })
     }
 
+    async fn insert_session_record(&self, id: &SessionId) -> Result<SessionRecord, StoreError> {
+        let now = now_str();
+        sqlx::query(
+            "INSERT INTO sessions (id, created_at, updated_at, summary) VALUES ($1, $2, $3, NULL) ON CONFLICT DO NOTHING",
+        )
+        .bind(id.to_string())
+        .bind(&now)
+        .bind(&now)
+        .execute(&self.pool)
+        .await?;
+        Ok(SessionRecord {
+            id: id.clone(),
+            created_at: parse_dt(&now)?,
+            updated_at: parse_dt(&now)?,
+            summary: None,
+        })
+    }
+
     async fn get_session(&self, id: &SessionId) -> Result<SessionRecord, StoreError> {
         let row = sqlx::query(
             "SELECT id, created_at, updated_at, summary FROM sessions WHERE id = $1",
@@ -199,6 +217,30 @@ impl RunStore for PostgresBackend {
         .await?;
         Ok(RunRecord {
             id,
+            session_id,
+            created_at: parse_dt(&now)?,
+            completed_at: None,
+            status: RunStatus::Running,
+        })
+    }
+
+    async fn insert_run_record(
+        &self,
+        id: &RunId,
+        session_id: SessionId,
+    ) -> Result<RunRecord, StoreError> {
+        let now = now_str();
+        sqlx::query(
+            "INSERT INTO runs (id, session_id, created_at, completed_at, status) VALUES ($1, $2, $3, NULL, $4) ON CONFLICT DO NOTHING",
+        )
+        .bind(id.to_string())
+        .bind(session_id.to_string())
+        .bind(&now)
+        .bind(status_to_str(&RunStatus::Running))
+        .execute(&self.pool)
+        .await?;
+        Ok(RunRecord {
+            id: id.clone(),
             session_id,
             created_at: parse_dt(&now)?,
             completed_at: None,

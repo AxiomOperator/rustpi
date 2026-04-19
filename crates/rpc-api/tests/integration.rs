@@ -5,16 +5,122 @@
 
 use std::time::Duration;
 
+use async_trait::async_trait;
+use futures::stream;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::time::timeout;
 
-use agent_core::types::ProviderId;
+use agent_core::types::{AuthState, ModelId, ProviderId};
+use model_adapters::{
+    provider::{
+        ChatMessage, CompletionRequest, CompletionResponse, EmbeddingRequest, EmbeddingResponse,
+        FinishReason, MessageContent, ModelInfo, ModelProvider, ProviderMetadata, Role, TokenDelta,
+        TokenUsage,
+    },
+    ProviderCapabilities, ProviderError,
+};
 use rpc_api::{
     AuthStatusInfo, CapabilitiesInfo, LineReader, LineWriter, RpcMethod, RpcRequest, RpcResponse,
-    RpcServer, SessionInfo,
+    RpcServer, ServerState, SessionInfo,
 };
 
+use model_adapters::registry::ProviderRegistry;
+
 const TIMEOUT: Duration = Duration::from_secs(5);
+
+// ---------------------------------------------------------------------------
+// Mock provider — returns a fixed stream of token deltas for unit tests
+// ---------------------------------------------------------------------------
+
+struct MockProvider {
+    id: ProviderId,
+    chunks: Vec<String>,
+}
+
+impl MockProvider {
+    fn new(id: &str, chunks: Vec<&str>) -> Self {
+        Self {
+            id: ProviderId::new(id),
+            chunks: chunks.into_iter().map(str::to_string).collect(),
+        }
+    }
+}
+
+#[async_trait]
+impl ModelProvider for MockProvider {
+    fn provider_id(&self) -> &ProviderId {
+        &self.id
+    }
+
+    fn capabilities(&self, _model: &ModelId) -> ProviderCapabilities {
+        ProviderCapabilities::default()
+    }
+
+    fn metadata(&self) -> ProviderMetadata {
+        ProviderMetadata {
+            id: self.id.clone(),
+            display_name: "Mock".to_string(),
+            description: "test mock".to_string(),
+            supported_auth_flows: vec![],
+            requires_network: false,
+        }
+    }
+
+    async fn list_models(&self) -> Result<Vec<ModelInfo>, ProviderError> {
+        Ok(vec![])
+    }
+
+    async fn complete(&self, _req: CompletionRequest) -> Result<CompletionResponse, ProviderError> {
+        Ok(CompletionResponse {
+            message: ChatMessage {
+                role: Role::Assistant,
+                content: MessageContent::Text("ok".to_string()),
+            },
+            finish_reason: FinishReason::Stop,
+            usage: TokenUsage { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 },
+        })
+    }
+
+    async fn complete_stream(
+        &self,
+        _req: CompletionRequest,
+    ) -> Result<
+        std::pin::Pin<
+            Box<dyn futures::Stream<Item = Result<TokenDelta, ProviderError>> + Send>,
+        >,
+        ProviderError,
+    > {
+        let deltas: Vec<Result<TokenDelta, ProviderError>> = self
+            .chunks
+            .iter()
+            .enumerate()
+            .map(|(i, text)| {
+                let is_last = i + 1 == self.chunks.len();
+                Ok(TokenDelta {
+                    text: Some(text.clone()),
+                    tool_call: None,
+                    finish_reason: if is_last { Some(FinishReason::Stop) } else { None },
+                })
+            })
+            .collect();
+        Ok(Box::pin(stream::iter(deltas)))
+    }
+
+    async fn embed(&self, _req: EmbeddingRequest) -> Result<EmbeddingResponse, ProviderError> {
+        Err(ProviderError::UnsupportedCapability("embed".to_string()))
+    }
+
+    async fn auth_state(&self) -> AuthState {
+        AuthState::Unauthenticated
+    }
+}
+
+/// Build a `ServerState` pre-loaded with `MockProvider` using provider id `"default"`.
+fn make_state_with_mock(chunks: Vec<&str>) -> std::sync::Arc<ServerState> {
+    let mut registry = ProviderRegistry::new();
+    registry.register(std::sync::Arc::new(MockProvider::new("default", chunks)));
+    ServerState::with_registry(registry)
+}
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -394,9 +500,9 @@ async fn rpc_capabilities_returns_info() {
             let info: CapabilitiesInfo = serde_json::from_value(data.clone()).unwrap();
             assert_eq!(info.protocol_version, "1.0");
             assert!(info.streaming_supported);
-            assert_eq!(info.supported_methods.len(), 6);
+            assert_eq!(info.supported_methods.len(), 7);
             for expected_method in
-                ["run_start", "run_cancel", "session_attach", "session_detach", "auth_status", "capabilities"]
+                ["run_start", "run_cancel", "session_attach", "session_detach", "auth_status", "auth_login", "capabilities"]
             {
                 assert!(
                     info.supported_methods.contains(&expected_method.to_string()),
@@ -493,7 +599,11 @@ async fn rpc_run_start_streams_token_chunks() {
     // server.run() returns only after EOF on the reader side.
     // The background task holds an Arc reference to the writer, so server_w
     // stays open until the task finishes – at which point client_r gets EOF.
-    let server = RpcServer::new(server_r, server_w);
+    let server = RpcServer::with_state(
+        make_state_with_mock(vec!["token chunk 0", "token chunk 1", "token chunk 2"]),
+        server_r,
+        server_w,
+    );
     timeout(TIMEOUT, server.run()).await.unwrap().unwrap();
 
     let mut br = BufReader::new(client_r);
@@ -550,7 +660,11 @@ async fn streaming_run_start_seq_numbers_increment() {
     .await;
     drop(client_w);
 
-    let server = RpcServer::new(server_r, server_w);
+    let server = RpcServer::with_state(
+        make_state_with_mock(vec!["hello", " world"]),
+        server_r,
+        server_w,
+    );
     timeout(TIMEOUT, server.run()).await.unwrap().unwrap();
 
     let mut br = BufReader::new(client_r);

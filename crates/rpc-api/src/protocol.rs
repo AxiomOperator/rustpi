@@ -36,6 +36,13 @@ pub enum RpcMethod {
     SessionDetach { session_id: SessionId },
     /// Query auth state for a provider.
     AuthStatus { provider: ProviderId },
+    /// Initiate authentication for a provider.
+    AuthLogin {
+        provider: ProviderId,
+        /// Optional client_id override (used for device code flows).
+        #[serde(default)]
+        client_id: Option<String>,
+    },
     /// Request provider capability info.
     Capabilities { provider: ProviderId },
 }
@@ -109,6 +116,19 @@ pub struct AuthStatusInfo {
     pub authenticated: bool,
     pub token_expires_at: Option<String>,
     pub flow: Option<String>,
+}
+
+/// Response type for AuthLogin — describes the outcome of a login attempt.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AuthLoginInfo {
+    pub provider_id: String,
+    pub authenticated: bool,
+    /// For device code flows: the code the user must enter at `verification_uri`.
+    pub user_code: Option<String>,
+    /// For device code flows: the URL the user must visit.
+    pub verification_uri: Option<String>,
+    /// Human-readable message describing next steps.
+    pub message: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

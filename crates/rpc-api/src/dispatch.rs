@@ -344,19 +344,29 @@ where
                 tools: build_tool_schemas(),
             };
 
-            // 3. Look up provider in registry.
+            // 3. Look up provider in registry; fall back to first available when
+            //    the requested ID is not explicitly registered (e.g. "default").
             let provider_arc = match state_clone.provider_registry.get(&provider_clone) {
                 Some(p) => Arc::clone(p),
-                None => {
-                    emit_run_failed(
-                        &state_clone,
-                        &writer_clone,
-                        &run_id_clone,
-                        format!("provider '{}' not found in registry", provider_clone),
-                    )
-                    .await;
-                    return;
-                }
+                None => match state_clone.provider_registry.first() {
+                    Some(p) => {
+                        tracing::debug!(
+                            requested = %provider_clone,
+                            "provider not found; using first available"
+                        );
+                        Arc::clone(p)
+                    }
+                    None => {
+                        emit_run_failed(
+                            &state_clone,
+                            &writer_clone,
+                            &run_id_clone,
+                            format!("provider '{}' not found in registry", provider_clone),
+                        )
+                        .await;
+                        return;
+                    }
+                },
             };
 
             // 4. Start streaming completion.

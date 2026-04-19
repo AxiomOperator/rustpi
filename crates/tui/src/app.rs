@@ -11,11 +11,14 @@ use futures::StreamExt;
 use ratatui::backend::CrosstermBackend;
 use ratatui::Terminal;
 use tokio::sync::broadcast;
+use tokio::sync::mpsc;
 use tokio::time::interval;
 
-use agent_core::types::AgentEvent;
+use agent_core::types::{AgentEvent, SessionId};
 use config_core::model::Config;
+use rpc_api::protocol::{RpcMethod, RpcRequest, RpcResponse};
 use rpc_api::server::ServerState;
+use rpc_api::{LineReader, LineWriter};
 
 use crate::input::{map_key, KeyAction};
 use crate::layout::compute_layout;
@@ -28,6 +31,7 @@ pub struct App {
     pub config: Config,
     pub input_buffer: String,
     pub scroll_offsets: HashMap<PaneId, usize>,
+    pub input_tx: Option<mpsc::Sender<String>>,
 }
 
 impl App {
@@ -49,6 +53,7 @@ impl App {
             config,
             input_buffer: String::new(),
             scroll_offsets: HashMap::new(),
+            input_tx: None,
         }
     }
 
@@ -59,6 +64,12 @@ impl App {
             let _ = execute!(std::io::stdout(), LeaveAlternateScreen);
             original_hook(panic_info);
         }));
+
+        // Set up input channel and spawn background run task before entering TUI.
+        let (input_tx, input_rx) = mpsc::channel::<String>(16);
+        self.input_tx = Some(input_tx);
+        let state_for_bg = Arc::clone(&self.server_state);
+        tokio::spawn(run_pipeline(state_for_bg, input_rx));
 
         enable_raw_mode()?;
         let mut stdout = std::io::stdout();
@@ -149,10 +160,15 @@ impl App {
                     self.input_buffer.clear();
                     self.state.messages.push(ChatMessage {
                         role: MessageRole::User,
-                        content,
+                        content: content.clone(),
                         timestamp: chrono::Utc::now(),
                     });
-                    self.state.status_message = Some("(prompt submitted — no model connected)".to_string());
+                    if let Some(tx) = &self.input_tx {
+                        let _ = tx.try_send(content);
+                        self.state.status_message = Some("Processing…".to_string());
+                    } else {
+                        self.state.status_message = Some("(no model connected)".to_string());
+                    }
                 }
             }
             KeyAction::ScrollUp => {
@@ -202,6 +218,56 @@ impl App {
     }
 }
 
+/// Background task: creates one TUI session then executes runs for each submitted prompt.
+/// Events are delivered back to the TUI via the shared `event_bus`.
+async fn run_pipeline(state: Arc<ServerState>, mut input_rx: mpsc::Receiver<String>) {
+    // Attach / create a session.
+    let session_id: Option<SessionId> = {
+        let request = RpcRequest {
+            id: uuid::Uuid::new_v4().to_string(),
+            method: RpcMethod::SessionAttach { session_id: None },
+        };
+        let (writer_half, reader_half) = tokio::io::duplex(65_536);
+        let line_writer = LineWriter::new(writer_half);
+        let _ = rpc_api::dispatch::dispatch(&request, &state, &line_writer).await;
+        drop(line_writer);
+        let mut reader = LineReader::new(reader_half);
+        let mut sid = None;
+        while let Some(Ok(resp)) = reader.next::<RpcResponse>().await {
+            if let RpcResponse::Success { data, .. } = resp {
+                if let Ok(info) = serde_json::from_value::<rpc_api::protocol::SessionInfo>(data) {
+                    if let Ok(uuid) = uuid::Uuid::parse_str(&info.session_id) {
+                        sid = Some(SessionId(uuid));
+                    }
+                    break;
+                }
+            }
+        }
+        sid
+    };
+
+    // Process each prompt sequentially.
+    while let Some(prompt) = input_rx.recv().await {
+        let request = RpcRequest {
+            id: uuid::Uuid::new_v4().to_string(),
+            method: RpcMethod::RunStart {
+                session_id: session_id.clone(),
+                provider: None,
+                model: None,
+                prompt,
+            },
+        };
+        let (writer_half, reader_half) = tokio::io::duplex(1_048_576);
+        let line_writer = LineWriter::new(writer_half);
+        let _ = rpc_api::dispatch::dispatch(&request, &state, &line_writer).await;
+        drop(line_writer);
+        // Drain responses; the run events arrive via the broadcast event_bus, which
+        // the TUI render loop already subscribes to.
+        let mut reader = LineReader::new(reader_half);
+        while reader.next::<RpcResponse>().await.is_some() {}
+    }
+}
+
 pub fn apply_agent_event(state: &mut AppState, event: AgentEvent) {
     match event {
         AgentEvent::TokenChunk { delta, .. } => {
@@ -218,6 +284,7 @@ pub fn apply_agent_event(state: &mut AppState, event: AgentEvent) {
                 });
             }
             state.active_run_id = None;
+            state.status_message = Some("Ready".to_string());
             state.log_entries.push_back(LogEntry {
                 level: "info".to_string(),
                 message: format!("Run {} completed", run_id),
@@ -236,6 +303,7 @@ pub fn apply_agent_event(state: &mut AppState, event: AgentEvent) {
                 });
             }
             state.active_run_id = None;
+            state.status_message = Some(format!("Error: {}", reason));
             state.log_entries.push_back(LogEntry {
                 level: "error".to_string(),
                 message: format!("Run {} failed: {}", run_id, reason),

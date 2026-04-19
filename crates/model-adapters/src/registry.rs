@@ -34,6 +34,11 @@ impl ProviderRegistry {
         self.providers.keys().collect()
     }
 
+    /// Return the first registered provider (useful as a fallback).
+    pub fn first(&self) -> Option<&Arc<dyn ModelProvider>> {
+        self.providers.values().next()
+    }
+
     pub fn is_empty(&self) -> bool {
         self.providers.is_empty()
     }

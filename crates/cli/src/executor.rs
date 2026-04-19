@@ -8,9 +8,14 @@
 use std::sync::Arc;
 
 use agent_core::types::{ModelId, ProviderId, SessionId};
+use auth_core::MemoryTokenStore;
+use config_core::model::Config;
 use rpc_api::{
     dispatch,
-    protocol::{AuthStatusInfo, CapabilitiesInfo, RpcMethod, RpcRequest, RpcResponse, SessionInfo},
+    protocol::{
+        AuthLoginInfo, AuthStatusInfo, CapabilitiesInfo, RpcMethod, RpcRequest, RpcResponse,
+        SessionInfo,
+    },
     server::ServerState,
     LineReader, LineWriter,
 };
@@ -20,11 +25,80 @@ use crate::error::{CliError, CliResult};
 
 pub struct Executor {
     pub state: Arc<ServerState>,
+    /// Direct reference to the in-process token store for CLI-layer writes
+    /// (e.g. after completing a device code flow).
+    pub token_store: Arc<MemoryTokenStore>,
 }
 
 impl Executor {
     pub fn new() -> Self {
-        Self { state: ServerState::new() }
+        let store = Arc::new(MemoryTokenStore::new());
+        Self {
+            state: ServerState::with_registry_and_store(
+                model_adapters::ProviderRegistry::new(),
+                store.clone(),
+            ),
+            token_store: store,
+        }
+    }
+
+    pub fn new_with_config(config: &Config) -> Self {
+        let store = Arc::new(rpc_api::provider_factory::build_token_store_for_config(config));
+        let registry = rpc_api::provider_factory::build_provider_registry(config);
+        Self {
+            state: ServerState::with_registry_and_store(registry, store.clone()),
+            token_store: store,
+        }
+    }
+
+    pub async fn new_with_config_and_persistence(config: &Config) -> Self {
+        use event_log::FileEventStore;
+        use session_store::factory::{build_run_store, build_session_store};
+
+        let store = Arc::new(rpc_api::provider_factory::build_token_store_for_config(config));
+        let registry = rpc_api::provider_factory::build_provider_registry(config);
+
+        let home = std::env::var("HOME").unwrap_or_else(|_| ".".to_string());
+        let rustpi_dir = format!("{}/.rustpi", home);
+        let event_log_path = format!("{}/events.jsonl", rustpi_dir);
+        let _ = tokio::fs::create_dir_all(&rustpi_dir).await;
+
+        match (
+            build_session_store(&config.memory).await,
+            build_run_store(&config.memory).await,
+            FileEventStore::open(&event_log_path).await,
+        ) {
+            (Ok(ss), Ok(rs), Ok(es)) => {
+                tracing::info!("persistence initialized (SQLite + JSONL event log)");
+                let state = ServerState::new_with_all(
+                    rpc_api::provider_factory::build_provider_registry(config),
+                    store.clone(),
+                    ss,
+                    rs,
+                    Arc::new(es),
+                );
+                // Reload existing sessions from store.
+                if let Some(session_store) = &state.session_store {
+                    match session_store.list_sessions().await {
+                        Ok(records) => {
+                            for record in records {
+                                tracing::debug!("found existing session: {}", record.id);
+                            }
+                        }
+                        Err(e) => tracing::warn!("failed to reload sessions: {}", e),
+                    }
+                }
+                Self { state, token_store: store }
+            }
+            (ss_res, rs_res, es_res) => {
+                if let Err(e) = ss_res { tracing::warn!("session store init failed: {}", e); }
+                if let Err(e) = rs_res { tracing::warn!("run store init failed: {}", e); }
+                if let Err(e) = es_res { tracing::warn!("event log init failed: {}", e); }
+                tracing::warn!("falling back to in-memory-only mode");
+                let state = ServerState::with_registry_and_store(registry, store.clone());
+                Self { state, token_store: store }
+            }
+        }
     }
 
     // -----------------------------------------------------------------------
@@ -203,6 +277,31 @@ impl Executor {
             }
         }
         Err(CliError::Other("no response from server for auth_status".into()))
+    }
+
+    /// Initiate authentication for a provider.
+    pub async fn auth_login(
+        &self,
+        provider: ProviderId,
+        client_id: Option<String>,
+    ) -> CliResult<AuthLoginInfo> {
+        let request = RpcRequest {
+            id: Uuid::new_v4().to_string(),
+            method: RpcMethod::AuthLogin { provider, client_id },
+        };
+        for resp in self.dispatch_sync(request).await? {
+            match resp {
+                RpcResponse::Success { data, .. } => {
+                    return serde_json::from_value::<AuthLoginInfo>(data)
+                        .map_err(|e| CliError::Other(e.to_string()));
+                }
+                RpcResponse::Error { code, message, .. } => {
+                    return Err(map_rpc_error(&code, message));
+                }
+                _ => continue,
+            }
+        }
+        Err(CliError::Other("no response from server for auth_login".into()))
     }
 
     // -----------------------------------------------------------------------

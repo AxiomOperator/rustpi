@@ -1,7 +1,12 @@
 //! `rustpi auth` subcommands.
 
 use agent_core::types::ProviderId;
-use config_core::model::Config;
+use auth_core::{
+    record::TokenRecord, AuthFlow, DeviceFlow, DeviceFlowConfig, DeviceFlowResult,
+};
+use chrono::Utc;
+use config_core::model::{Config, ProviderAuthConfig, ProviderKind};
+use tokio_util::sync::CancellationToken;
 
 use crate::{
     args::{AuthCommand, OutputFormat},
@@ -19,7 +24,9 @@ pub async fn auth_command(
 ) -> CliResult<()> {
     match subcommand {
         AuthCommand::Status { provider } => status(provider, config, output, executor).await,
-        AuthCommand::Login { provider } => login(provider, output, executor, non_interactive).await,
+        AuthCommand::Login { provider } => {
+            login(provider, config, output, executor, non_interactive).await
+        }
         AuthCommand::Logout { provider } => logout(provider, output, executor).await,
     }
 }
@@ -62,6 +69,7 @@ async fn status(
 
 async fn login(
     provider: String,
+    config: &Config,
     output: &Output,
     executor: &Executor,
     non_interactive: bool,
@@ -72,9 +80,10 @@ async fn login(
         ));
     }
 
-    // Check current auth state first (real RPC call).
-    let info = executor.auth_status(ProviderId::new(&provider)).await?;
+    let provider_id = ProviderId::new(&provider);
 
+    // Check current auth state first.
+    let info = executor.auth_status(provider_id.clone()).await?;
     if info.authenticated {
         if output.format == OutputFormat::Json {
             output.print_success(
@@ -90,30 +99,180 @@ async fn login(
         return Ok(());
     }
 
-    // The dispatch layer does not yet have a LoginStart method; report clearly.
+    // Find the provider in config to determine the auth flow.
+    let provider_cfg = config.providers.iter().find(|p| p.id == provider_id);
+
+    match provider_cfg.map(|p| (&p.kind, &p.auth)) {
+        Some((_, ProviderAuthConfig::ApiKey { env_var })) => {
+            // API key provider: guide the user to set the env var.
+            if output.format == OutputFormat::Json {
+                output.print_success(
+                    "",
+                    &serde_json::json!({
+                        "provider": provider,
+                        "auth_type": "api_key",
+                        "env_var": env_var,
+                        "message": format!("Set the {} environment variable to authenticate.", env_var),
+                    }),
+                );
+            } else {
+                println!("Provider '{}' uses API key authentication.", provider);
+                println!("Set the following environment variable:");
+                println!("  export {}=<your-api-key>", env_var);
+            }
+            Ok(())
+        }
+
+        Some((ProviderKind::GithubCopilot, ProviderAuthConfig::DeviceCode)) => {
+            run_github_copilot_device_flow(&provider, executor, output).await
+        }
+
+        Some((_, ProviderAuthConfig::DeviceCode)) => {
+            // Generic device code provider — URLs not in config yet.
+            if output.format == OutputFormat::Json {
+                output.print_success(
+                    "",
+                    &serde_json::json!({
+                        "provider": provider,
+                        "auth_type": "device_code",
+                        "message": "Device code flow for this provider requires additional configuration (device_auth_url, token_url, client_id).",
+                    }),
+                );
+            } else {
+                println!(
+                    "Provider '{}' uses device code authentication, but the required \
+                     OAuth parameters (device_auth_url, token_url, client_id) are not yet \
+                     configured.",
+                    provider
+                );
+            }
+            Ok(())
+        }
+
+        Some((_, ProviderAuthConfig::OAuthBrowser)) => {
+            if output.format == OutputFormat::Json {
+                output.print_success(
+                    "",
+                    &serde_json::json!({
+                        "provider": provider,
+                        "auth_type": "oauth_browser",
+                        "message": "Browser OAuth flow is not yet implemented.",
+                    }),
+                );
+            } else {
+                println!(
+                    "Provider '{}' uses browser OAuth, which is not yet implemented.",
+                    provider
+                );
+            }
+            Ok(())
+        }
+
+        None => {
+            Err(CliError::InvalidArgs(format!(
+                "Provider '{}' is not configured. Add it to your config.toml.",
+                provider
+            )))
+        }
+    }
+}
+
+/// Run the GitHub Copilot device code flow interactively.
+async fn run_github_copilot_device_flow(
+    provider: &str,
+    executor: &Executor,
+    output: &Output,
+) -> CliResult<()> {
+    // Well-known public OAuth parameters for GitHub Copilot device flow.
+    // The client_id is the publicly documented GitHub Copilot neovim plugin client ID.
+    let config = DeviceFlowConfig {
+        provider_id: ProviderId::new(provider),
+        client_id: "Iv1.b507a08c87ecfe98".to_string(),
+        device_auth_url: "https://github.com/login/device/code".to_string(),
+        token_url: "https://github.com/login/oauth/access_token".to_string(),
+        scopes: vec!["read:user".to_string()],
+    };
+
+    let flow = DeviceFlow::new(config);
+
+    if output.format != OutputFormat::Json {
+        println!("Requesting device code from GitHub...");
+    }
+
+    let device_code = flow
+        .request_device_code()
+        .await
+        .map_err(|e| CliError::AuthFailed(e.to_string()))?;
+
     if output.format == OutputFormat::Json {
         output.print_success(
             "",
             &serde_json::json!({
                 "provider": provider,
-                "status": "login_not_implemented",
-                "message": "Backend login flow not yet available; set credentials via environment variable or config.",
+                "user_code": device_code.user_code,
+                "verification_uri": device_code.verification_uri,
+                "message": "Visit the URL and enter the code to complete authentication.",
             }),
         );
     } else {
-        println!(
-            "Auth login for '{}': backend login flow is not yet implemented.",
-            provider
-        );
-        println!(
-            "Set credentials via environment variable or the [providers] section in config.toml."
-        );
+        println!();
+        println!("  Visit:  {}", device_code.verification_uri);
+        println!("  Enter:  {}", device_code.user_code);
+        println!();
+        println!("Waiting for authorization (press Ctrl+C to cancel)...");
     }
 
-    Err(CliError::AuthFailed(format!(
-        "login flow not yet implemented for provider '{}'",
-        provider
-    )))
+    let cancel_token = CancellationToken::new();
+    let result = flow
+        .poll_for_token(&device_code, cancel_token)
+        .await
+        .map_err(|e| CliError::AuthFailed(e.to_string()))?;
+
+    match result {
+        DeviceFlowResult::Success(token_response) => {
+            let expires_at = token_response.expires_in.map(|secs| {
+                Utc::now() + chrono::Duration::seconds(secs as i64)
+            });
+
+            let record = TokenRecord {
+                provider_id: ProviderId::new(provider),
+                access_token: token_response.access_token,
+                refresh_token: token_response.refresh_token,
+                expires_at,
+                scopes: token_response
+                    .scope
+                    .as_deref()
+                    .unwrap_or("")
+                    .split_whitespace()
+                    .map(str::to_string)
+                    .collect(),
+                flow: AuthFlow::DeviceCode,
+                stored_at: Utc::now(),
+            };
+
+            executor.token_store.save_record(record);
+
+            if output.format == OutputFormat::Json {
+                output.print_success(
+                    "",
+                    &serde_json::json!({
+                        "provider": provider,
+                        "authenticated": true,
+                    }),
+                );
+            } else {
+                println!("✓ Successfully authenticated as provider '{}'.", provider);
+            }
+
+            Ok(())
+        }
+        DeviceFlowResult::Expired => Err(CliError::AuthFailed(
+            "Device code expired before authorization was completed.".into(),
+        )),
+        DeviceFlowResult::Cancelled => Err(CliError::AuthFailed(
+            "Authentication was cancelled.".into(),
+        )),
+    }
 }
 
 async fn logout(provider: String, output: &Output, executor: &Executor) -> CliResult<()> {

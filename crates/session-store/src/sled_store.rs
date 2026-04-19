@@ -171,6 +171,31 @@ impl SessionStore for SledBackend {
         })
     }
 
+    async fn insert_session_record(&self, id: &SessionId) -> Result<SessionRecord, StoreError> {
+        let id_clone = id.clone();
+        let now = now_rfc();
+        let rec = SledSession {
+            id: id_clone.to_string(),
+            created_at: now.clone(),
+            updated_at: now.clone(),
+            summary: None,
+        };
+        let bytes = serde_json::to_vec(&rec)?;
+        let tree = self.sessions.clone();
+        let key = id_clone.to_string();
+        // Use insert_if_absent pattern: only insert if key doesn't already exist.
+        tokio::task::spawn_blocking(move || tree.compare_and_swap(key.as_bytes(), None::<&[u8]>, Some(bytes)))
+            .await
+            .map_err(|e| StoreError::Database(e.to_string()))?
+            .ok(); // ignore conflict (already inserted)
+        Ok(SessionRecord {
+            id: id.clone(),
+            created_at: parse_dt(&now)?,
+            updated_at: parse_dt(&now)?,
+            summary: None,
+        })
+    }
+
     async fn get_session(&self, id: &SessionId) -> Result<SessionRecord, StoreError> {
         let tree = self.sessions.clone();
         let key = id.to_string();
@@ -267,6 +292,36 @@ impl RunStore for SledBackend {
             .map_err(StoreError::from)?;
         Ok(RunRecord {
             id,
+            session_id,
+            created_at: parse_dt(&now)?,
+            completed_at: None,
+            status: RunStatus::Running,
+        })
+    }
+
+    async fn insert_run_record(
+        &self,
+        id: &RunId,
+        session_id: SessionId,
+    ) -> Result<RunRecord, StoreError> {
+        let id_clone = id.clone();
+        let now = now_rfc();
+        let rec = SledRun {
+            id: id_clone.to_string(),
+            session_id: session_id.to_string(),
+            created_at: now.clone(),
+            completed_at: None,
+            status: status_to_str(&RunStatus::Running).to_string(),
+        };
+        let bytes = serde_json::to_vec(&rec)?;
+        let tree = self.runs.clone();
+        let key = id_clone.to_string();
+        tokio::task::spawn_blocking(move || tree.compare_and_swap(key.as_bytes(), None::<&[u8]>, Some(bytes)))
+            .await
+            .map_err(|e| StoreError::Database(e.to_string()))?
+            .ok();
+        Ok(RunRecord {
+            id: id.clone(),
             session_id,
             created_at: parse_dt(&now)?,
             completed_at: None,
