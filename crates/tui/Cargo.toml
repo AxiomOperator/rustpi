@@ -8,6 +8,13 @@ description = "Ratatui-based interactive TUI for the agent runtime"
 name = "rustpi-tui"
 path = "src/main.rs"
 
+[[test]]
+name = "tui_tests"
+path = "tests/tui_tests.rs"
+
+[dev-dependencies]
+uuid = { workspace = true }
+
 [dependencies]
 agent-core = { path = "../agent-core" }
 config-core = { path = "../config-core" }
@@ -18,3 +25,7 @@ tokio = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
 anyhow = { workspace = true }
+ratatui = "0.29"
+crossterm = { version = "0.28", features = ["event-stream"] }
+futures = { workspace = true }
+chrono = { workspace = true }
