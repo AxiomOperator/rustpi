@@ -88,6 +88,12 @@ pub enum Command {
 
     /// Show current observability metrics (provider stats, token usage, tool failures).
     Metrics,
+
+    /// Show configuration and provider status.
+    Status,
+
+    /// List past sessions from the persistent session store.
+    Sessions,
 }
 
 /// Arguments for `rustpi run`.

@@ -134,6 +134,14 @@ async fn run() -> i32 {
         Some(Command::Metrics) => {
             cli::commands::metrics::metrics_command(&telemetry, &output).await
         }
+
+        Some(Command::Status) => {
+            cli::commands::status::show_status(&executor).await.map_err(|e| e)
+        }
+
+        Some(Command::Sessions) => {
+            cli::commands::sessions::list_sessions(&executor).await.map_err(|e| e)
+        }
     };
 
     match result {

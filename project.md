@@ -1388,6 +1388,15 @@ The following items were declared or implied but are not yet implemented:
 9. **Platform keyring** — token storage uses encrypted files; OS keyring integration is documented as deferred.
 10. **BOOTSTRAP.md / HEARTBEAT.md / TOOLS.md** — canonical doc loaders stub these paths but the files are not shipped with the crate.
 
+### Gap 11 completions (missing features and polish)
+
+The following polish items were addressed after Phase 14:
+
+* [x] **`rustpi status` command** — shows configured providers, session store, and event log status.
+* [x] **`rustpi sessions` command** — lists past sessions from the persistent session store.
+* [x] **Improved no-provider error message** — `RunFailed` now includes a copy-pasteable `config.toml` snippet.
+* [x] **README Quick Start** — added a "Running with a provider" section with provider config example, `run`, `chat`, `status`, and `sessions` commands.
+
 ### Validation coverage summary
 
 | Crate | Test functions | Layer coverage |

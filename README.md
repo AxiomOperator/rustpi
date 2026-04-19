@@ -69,6 +69,36 @@ cargo build --workspace
 cargo test --workspace
 ```
 
+### Running with a provider
+
+1. Add a provider to `~/.config/rustpi/config.toml`:
+   ```toml
+   [[providers]]
+   id = "local"
+   kind = "openai_compatible"
+   base_url = "http://localhost:11434/v1"  # Ollama example
+   ```
+
+2. Run a prompt:
+   ```sh
+   rustpi run "explain this codebase"
+   ```
+
+3. Open the TUI:
+   ```sh
+   rustpi chat
+   ```
+
+4. Check status:
+   ```sh
+   rustpi status
+   ```
+
+5. List past sessions:
+   ```sh
+   rustpi sessions
+   ```
+
 ### Requirements
 
 - Rust 1.75+ (stable)
@@ -802,6 +832,8 @@ cargo install --path crates/cli
 | `rustpi auth logout --provider <ID>` | Revoke stored credentials for a provider |
 | `rustpi replay [--session-id <ID>]` | View the event timeline for a session |
 | `rustpi diag` | Print a system diagnostics report (includes event log section) |
+| `rustpi status` | Show configured providers, session store, and event log status |
+| `rustpi sessions` | List past sessions from the persistent session store |
 
 ### Global flags
 
