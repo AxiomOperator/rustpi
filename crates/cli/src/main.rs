@@ -5,19 +5,13 @@
 //! bypassing the stdin/stdout JSONL transport.  A `tokio::io::duplex()` channel is used
 //! inside the `Executor` to pass responses from the dispatch layer back to the CLI.
 
-mod args;
-mod commands;
-mod error;
-mod executor;
-mod output;
-
 use clap::Parser;
 use config_core::loader::ConfigLoader;
 
 use agent_core::types::{ModelId, ProviderId, SessionId};
-use args::{Cli, Command, OutputFormat};
-use executor::{parse_session_id, Executor};
-use output::Output;
+use cli::args::{Cli, Command, OutputFormat};
+use cli::executor::{parse_session_id, Executor};
+use cli::output::Output;
 
 #[tokio::main]
 async fn main() {
@@ -26,15 +20,15 @@ async fn main() {
 }
 
 async fn run() -> i32 {
-    let cli = Cli::parse();
+    let parsed_args = Cli::parse();
 
     // Initialise logging to stderr so stdout remains clean for command output.
-    init_logging(&cli);
+    init_logging(&parsed_args);
 
     // Load layered config; --config overrides the project-level path.
     let config = {
         let mut loader = ConfigLoader::new();
-        if let Some(path) = &cli.config {
+        if let Some(path) = &parsed_args.config {
             loader = loader.with_project_path(path.clone());
         }
         match loader.load() {
@@ -47,25 +41,25 @@ async fn run() -> i32 {
     };
 
     // Build output helper.
-    let output = Output::new(cli.output.clone(), config.cli.color);
+    let output = Output::new(parsed_args.output.clone(), config.cli.color);
 
     // Build executor (creates a fresh in-process ServerState).
     let executor = Executor::new();
 
     // Resolve global overrides.
-    let provider: Option<ProviderId> = cli
+    let provider: Option<ProviderId> = parsed_args
         .provider
         .as_deref()
         .map(ProviderId::new)
         .or_else(|| config.global.default_provider.clone());
 
-    let model: Option<ModelId> = cli
+    let model: Option<ModelId> = parsed_args
         .model
         .as_deref()
         .map(ModelId::new)
         .or_else(|| config.global.default_model.clone());
 
-    let session_id: Option<SessionId> = match cli.session_id.as_deref().map(parse_session_id) {
+    let session_id: Option<SessionId> = match parsed_args.session_id.as_deref().map(parse_session_id) {
         Some(Err(e)) => {
             output.print_err(&e.to_string());
             return e.exit_code();
@@ -74,7 +68,7 @@ async fn run() -> i32 {
         None => None,
     };
 
-    let result = match cli.command {
+    let result = match parsed_args.command {
         None => {
             // No subcommand: print help.
             use clap::CommandFactory;
@@ -85,12 +79,12 @@ async fn run() -> i32 {
         }
 
         Some(Command::Run(ref args)) => {
-            commands::run::run_command(
+            cli::commands::run::run_command(
                 args,
                 provider,
                 model,
                 session_id,
-                cli.non_interactive,
+                parsed_args.non_interactive,
                 &output,
                 &executor,
             )
@@ -98,22 +92,22 @@ async fn run() -> i32 {
         }
 
         Some(Command::Session { subcommand }) => {
-            commands::session::session_command(subcommand, &output, &executor).await
+            cli::commands::session::session_command(subcommand, &output, &executor).await
         }
 
         Some(Command::Auth { subcommand }) => {
-            commands::auth::auth_command(
+            cli::commands::auth::auth_command(
                 subcommand,
                 &config,
                 &output,
                 &executor,
-                cli.non_interactive,
+                parsed_args.non_interactive,
             )
             .await
         }
 
         Some(Command::Diag) => {
-            commands::diag::diag_command(&config, &output, &executor).await
+            cli::commands::diag::diag_command(&config, &output, &executor).await
         }
     };
 
@@ -126,11 +120,11 @@ async fn run() -> i32 {
     }
 }
 
-fn init_logging(cli: &Cli) {
+fn init_logging(parsed_args: &Cli) {
     // Write logs to stderr only; stdout must stay clean for command output.
     // Respect RUST_LOG, fall back to warn so routine commands are quiet.
     let filter = std::env::var("RUST_LOG").unwrap_or_else(|_| {
-        if cli.output == OutputFormat::Json {
+        if parsed_args.output == OutputFormat::Json {
             "error".to_string()
         } else {
             "warn".to_string()
