@@ -102,6 +102,11 @@ fn event_run_id(event: &AgentEvent) -> Option<&RunId> {
         AgentEvent::ToolExecutionCancelled { run_id, .. } => Some(run_id),
         AgentEvent::ContextBuilt { run_id, .. } => Some(run_id),
         AgentEvent::ContextCompacted { run_id, .. } => Some(run_id),
+        AgentEvent::ApprovalDenied { run_id, .. } => Some(run_id),
+        AgentEvent::ApprovalGranted { run_id, .. } => Some(run_id),
+        AgentEvent::CommandDenied { run_id, .. } => Some(run_id),
+        AgentEvent::PathDenied { run_id, .. } => Some(run_id),
+        AgentEvent::OverwriteBlocked { run_id, .. } => Some(run_id),
         _ => None,
     }
 }

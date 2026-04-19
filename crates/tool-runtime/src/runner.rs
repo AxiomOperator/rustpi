@@ -3,6 +3,7 @@
 
 use crate::{
     approval::{ApprovalContext, ApprovalDecision, ApprovalHook, AutoApprove},
+    audit::AuditSink,
     registry::ToolRegistry,
     schema::{ToolConfig, ToolSensitivity},
     ToolError,
@@ -23,6 +24,8 @@ pub struct ToolRunner {
     approval: Arc<dyn ApprovalHook>,
     /// Optional broadcast sender for tool lifecycle events.
     event_tx: Option<broadcast::Sender<AgentEvent>>,
+    /// Sink for security audit events.
+    audit_sink: AuditSink,
 }
 
 impl ToolRunner {
@@ -32,6 +35,7 @@ impl ToolRunner {
             default_timeout,
             approval: Arc::new(AutoApprove),
             event_tx: None,
+            audit_sink: AuditSink::noop(),
         }
     }
 
@@ -44,6 +48,12 @@ impl ToolRunner {
     /// Connect an event broadcast channel for lifecycle events.
     pub fn with_event_tx(mut self, tx: broadcast::Sender<AgentEvent>) -> Self {
         self.event_tx = Some(tx);
+        self
+    }
+
+    /// Set an audit sink for security events.
+    pub fn with_audit_sink(mut self, sink: AuditSink) -> Self {
+        self.audit_sink = sink;
         self
     }
 
@@ -82,10 +92,28 @@ impl ToolRunner {
                 sensitivity: sensitivity.clone(),
                 args: call.arguments.clone(),
             };
+            let sensitivity_str = format!("{:?}", sensitivity).to_lowercase();
             match self.approval.check(&ctx).await {
-                ApprovalDecision::Approved => {}
+                ApprovalDecision::Approved => {
+                    let run_id = config.run_id.clone().unwrap_or_else(RunId::new);
+                    self.audit_sink.approval_granted(run_id.clone(), &call.name, &sensitivity_str);
+                    self.emit(AgentEvent::ApprovalGranted {
+                        run_id,
+                        tool_name: call.name.clone(),
+                        sensitivity: sensitivity_str,
+                        timestamp: Utc::now(),
+                    });
+                }
                 ApprovalDecision::Denied(reason) | ApprovalDecision::Pending(reason) => {
                     let run_id = config.run_id.clone().unwrap_or_else(RunId::new);
+                    self.audit_sink.approval_denied(run_id.clone(), &call.name, &sensitivity_str, &reason);
+                    self.emit(AgentEvent::ApprovalDenied {
+                        run_id: run_id.clone(),
+                        tool_name: call.name.clone(),
+                        sensitivity: sensitivity_str,
+                        reason: reason.clone(),
+                        timestamp: Utc::now(),
+                    });
                     self.emit(AgentEvent::ToolFailed {
                         run_id,
                         call_id: call.id.clone(),

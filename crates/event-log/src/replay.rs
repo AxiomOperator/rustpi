@@ -444,6 +444,24 @@ fn event_summary(event: &AgentEvent) -> String {
         AgentEvent::ContextCompacted { tokens_before, tokens_after, .. } => {
             format!("Context compacted: {} → {} tokens", tokens_before, tokens_after)
         }
+        AgentEvent::ApprovalDenied { tool_name, reason, .. } => {
+            format!("Approval DENIED for tool '{}': {}", tool_name, reason)
+        }
+        AgentEvent::ApprovalGranted { tool_name, .. } => {
+            format!("Approval granted for tool '{}'", tool_name)
+        }
+        AgentEvent::CommandDenied { command_preview, reason, .. } => {
+            format!("Command DENIED '{}': {}", command_preview, reason)
+        }
+        AgentEvent::PathDenied { path, reason, .. } => {
+            format!("Path DENIED '{}': {}", path, reason)
+        }
+        AgentEvent::OverwriteBlocked { path, reason, .. } => {
+            format!("Overwrite BLOCKED '{}': {}", path, reason)
+        }
+        AgentEvent::PolicyDenied { domain, subject, reason, .. } => {
+            format!("Policy DENIED [{}] '{}': {}", domain, subject, reason)
+        }
     }
 }
 

@@ -371,4 +371,59 @@ pub enum AgentEvent {
         tokens_after: u32,
         timestamp: DateTime<Utc>,
     },
+
+    // --- Security audit ---
+
+    /// A tool execution was blocked by approval policy.
+    ApprovalDenied {
+        run_id: RunId,
+        tool_name: String,
+        /// "safe" | "low" | "medium" | "high" | "critical"
+        sensitivity: String,
+        reason: String,
+        timestamp: DateTime<Utc>,
+    },
+
+    /// A tool execution was approved (for High/Critical tools).
+    ApprovalGranted {
+        run_id: RunId,
+        tool_name: String,
+        sensitivity: String,
+        timestamp: DateTime<Utc>,
+    },
+
+    /// A shell command was denied by command policy.
+    CommandDenied {
+        run_id: RunId,
+        /// The command is redacted to first 100 chars to avoid logging secrets.
+        command_preview: String,
+        reason: String,
+        timestamp: DateTime<Utc>,
+    },
+
+    /// A file path was denied by path safety policy (traversal attempt).
+    PathDenied {
+        run_id: RunId,
+        path: String,
+        reason: String,
+        timestamp: DateTime<Utc>,
+    },
+
+    /// A file overwrite was blocked by overwrite policy.
+    OverwriteBlocked {
+        run_id: RunId,
+        path: String,
+        reason: String,
+        timestamp: DateTime<Utc>,
+    },
+
+    /// A policy rule denied a tool, file, or provider request.
+    PolicyDenied {
+        /// "tool" | "file" | "provider" | "auth"
+        domain: String,
+        subject: String,
+        rule: Option<String>,
+        reason: String,
+        timestamp: DateTime<Utc>,
+    },
 }

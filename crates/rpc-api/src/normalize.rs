@@ -347,6 +347,56 @@ pub fn normalize_event(event: &AgentEvent, seq: u64) -> RpcEvent {
             "context_compacted",
             json!({ "tokens_before": tokens_before, "tokens_after": tokens_after }),
         ),
+
+        // --- Security audit ---
+        AgentEvent::ApprovalDenied { run_id, tool_name, sensitivity, reason, timestamp } => (
+            timestamp.to_rfc3339(),
+            EventCategory::Tool,
+            None,
+            Some(run_id.to_string()),
+            "approval_denied",
+            json!({ "tool_name": tool_name, "sensitivity": sensitivity, "reason": reason }),
+        ),
+        AgentEvent::ApprovalGranted { run_id, tool_name, sensitivity, timestamp } => (
+            timestamp.to_rfc3339(),
+            EventCategory::Tool,
+            None,
+            Some(run_id.to_string()),
+            "approval_granted",
+            json!({ "tool_name": tool_name, "sensitivity": sensitivity }),
+        ),
+        AgentEvent::CommandDenied { run_id, command_preview, reason, timestamp } => (
+            timestamp.to_rfc3339(),
+            EventCategory::Tool,
+            None,
+            Some(run_id.to_string()),
+            "command_denied",
+            json!({ "command_preview": command_preview, "reason": reason }),
+        ),
+        AgentEvent::PathDenied { run_id, path, reason, timestamp } => (
+            timestamp.to_rfc3339(),
+            EventCategory::Tool,
+            None,
+            Some(run_id.to_string()),
+            "path_denied",
+            json!({ "path": path, "reason": reason }),
+        ),
+        AgentEvent::OverwriteBlocked { run_id, path, reason, timestamp } => (
+            timestamp.to_rfc3339(),
+            EventCategory::Tool,
+            None,
+            Some(run_id.to_string()),
+            "overwrite_blocked",
+            json!({ "path": path, "reason": reason }),
+        ),
+        AgentEvent::PolicyDenied { domain, subject, rule, reason, timestamp } => (
+            timestamp.to_rfc3339(),
+            EventCategory::System,
+            None,
+            None,
+            "policy_denied",
+            json!({ "domain": domain, "subject": subject, "rule": rule, "reason": reason }),
+        ),
     };
 
     RpcEvent {

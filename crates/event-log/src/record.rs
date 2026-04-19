@@ -61,6 +61,12 @@ impl EventRecord {
                 | AgentEvent::ToolCallRequested { .. }
                 | AgentEvent::ToolResultSubmitted { .. }
                 | AgentEvent::CancellationRequested { .. }
+                | AgentEvent::ApprovalDenied { .. }
+                | AgentEvent::ApprovalGranted { .. }
+                | AgentEvent::CommandDenied { .. }
+                | AgentEvent::PathDenied { .. }
+                | AgentEvent::OverwriteBlocked { .. }
+                | AgentEvent::PolicyDenied { .. }
         )
     }
 }

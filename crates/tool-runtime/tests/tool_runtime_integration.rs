@@ -998,3 +998,44 @@ async fn require_approval_blocks_safe_tool_when_deny_all() {
         "require_approval must force hook call even for Safe tools; got: {err:?}"
     );
 }
+
+#[tokio::test]
+async fn tool_runner_emits_approval_denied_event() {
+    let dir = TempDir::new().unwrap();
+    let (tx, mut rx) = broadcast::channel::<AgentEvent>(32);
+    let reg = make_registry(make_policy(&dir), None);
+    let run_id = fresh_run_id();
+
+    // DenyAbove(High) will deny Critical-sensitivity tools (shell is critical).
+    let runner = ToolRunner::new(reg, Duration::from_secs(30))
+        .with_approval(Arc::new(DenyAbove { threshold: ToolSensitivity::High }))
+        .with_event_tx(tx);
+
+    let err = runner
+        .execute(
+            shell_call("deny-test", "echo hello"),
+            ToolConfig {
+                run_id: Some(run_id.clone()),
+                ..Default::default()
+            },
+        )
+        .await
+        .unwrap_err();
+
+    assert!(
+        matches!(err, ToolError::PolicyDenied(_)),
+        "expected PolicyDenied, got: {err:?}"
+    );
+
+    // Collect all events from the channel.
+    let mut events = Vec::new();
+    while let Ok(ev) = rx.try_recv() {
+        events.push(ev);
+    }
+
+    let has_approval_denied = events.iter().any(|e| matches!(e, AgentEvent::ApprovalDenied { .. }));
+    let has_tool_failed = events.iter().any(|e| matches!(e, AgentEvent::ToolFailed { .. }));
+
+    assert!(has_approval_denied, "expected ApprovalDenied event; got: {events:?}");
+    assert!(has_tool_failed, "expected ToolFailed event; got: {events:?}");
+}
