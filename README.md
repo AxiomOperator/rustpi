@@ -2,7 +2,7 @@
 
 A native Rust AI agent platform with multi-provider model access, durable sessions, Obsidian-backed local-first memory, and a rich terminal UI.
 
-**Status: Phases 0–9 complete — RPC API live**
+**Status: Phases 0–10 complete — CLI live**
 
 ---
 
@@ -54,7 +54,7 @@ session-store   event-log    config-core
 | `session-store` | Durable session persistence (SQLite / sled / PostgreSQL); 4 store traits + config-driven factory | ✅ Phase 7 |
 | `memory-sync` | Qdrant semantic memory (`QdrantMemory`); Obsidian vault reader/writer, canonical docs, personality loader, sync engine | ✅ Phase 8 |
 | `rpc-api` | stdin/stdout JSONL RPC server — session attach/detach, run start/cancel, auth status, capabilities | ✅ Phase 9 |
-| `cli` | Scriptable CLI binary (`rustpi`) | 🔧 Phase 10 |
+| `cli` | Scriptable CLI binary (`rustpi`) | ✅ Phase 10 |
 | `tui` | Ratatui full-screen TUI binary (`rustpi-tui`) | 🔧 Phase 11 |
 
 ---
@@ -772,6 +772,180 @@ Errors include a structured `code` field for programmatic handling:
 
 ---
 
+## CLI
+
+The `rustpi` binary is a production-usable scriptable CLI built with `clap`. It wraps the full agent runtime and exposes every capability through a consistent command tree with human-readable streaming output and a stable JSON mode for automation.
+
+### Build / install
+
+```sh
+# Build the binary into target/
+cargo build -p cli
+
+# Or install directly onto $PATH
+cargo install --path crates/cli
+```
+
+### Command reference
+
+| Command | Description |
+|---|---|
+| `rustpi run <PROMPT>` | Submit a prompt and stream the response |
+| `rustpi run --file <PATH>` | Read prompt from a file |
+| `rustpi session list` | List all active sessions |
+| `rustpi session attach [--id <UUID>]` | Attach to an existing session |
+| `rustpi session detach <UUID>` | Detach from a session |
+| `rustpi session info <UUID>` | Show session metadata |
+| `rustpi auth status [--provider <ID>]` | Check auth state for all or one provider |
+| `rustpi auth login --provider <ID>` | Start an auth flow for a provider |
+| `rustpi auth logout --provider <ID>` | Revoke stored credentials for a provider |
+| `rustpi diag` | Print a system diagnostics report |
+
+### Global flags
+
+| Flag | Default | Description |
+|---|---|---|
+| `--output <FORMAT>` | `print` | Output format: `print` or `json` |
+| `--provider <ID>` | config | Override the active provider |
+| `--model <ID>` | config | Override the active model |
+| `--session-id <UUID>` | — | Attach to an existing session by ID |
+| `--non-interactive` | false | Fail immediately instead of prompting |
+| `--config <PATH>` | auto | Override config file path |
+
+### Usage examples
+
+#### Submitting a prompt
+
+```sh
+# Positional argument
+rustpi run "What is Rust?"
+
+# Pipe from stdin
+echo "Summarise the Rust ownership model" | rustpi run
+
+# Read from a file
+rustpi run --file task.md
+
+# Override provider and model for one call
+rustpi run --provider openai --model gpt-4o "Hello"
+```
+
+#### JSON output
+
+```sh
+# Machine-readable response
+rustpi run --output json "Explain lifetimes"
+
+# Streaming JSONL (one object per token chunk)
+rustpi run --output json "Write a haiku"
+```
+
+**Success envelope:**
+```json
+{"ok": true, "data": {"response": "..."}}
+```
+
+**Error envelope:**
+```json
+{"ok": false, "error": {"code": "run_failed", "message": "Provider returned 429"}}
+```
+
+**Streaming (JSONL):**
+```jsonl
+{"event":"token_chunk","data":{"text":"Rust"}}
+{"event":"token_chunk","data":{"text":" is"}}
+{"event":"done","data":{}}
+```
+
+#### Piped I/O patterns
+
+```sh
+# Stdin pipe — no positional argument needed
+cat notes.txt | rustpi run
+
+# Combine with other tools
+rustpi run --output json "List the top 5 risks" | jq '.data.response'
+```
+
+#### Session management
+
+```sh
+# List all active sessions
+rustpi session list
+
+# Start a run and continue it in the same session
+ID=$(rustpi run --output json "Start a plan" | jq -r '.data.session_id')
+rustpi run --session-id "$ID" "Add step 2"
+
+# Inspect a session
+rustpi session info "$ID"
+
+# Detach when done
+rustpi session detach "$ID"
+```
+
+#### Auth commands
+
+```sh
+# Check auth across all providers
+rustpi auth status
+
+# Check a single provider
+rustpi auth status --provider openai
+
+# Authenticate via GitHub device flow
+rustpi auth login --provider github-copilot
+
+# Revoke stored credentials
+rustpi auth logout --provider openai
+```
+
+#### Diagnostics
+
+```sh
+# Human-readable report
+rustpi diag
+
+# Machine-readable
+rustpi diag --output json
+```
+
+### Output modes
+
+| Mode | Description |
+|---|---|
+| `print` (default) | Human-readable; ANSI colour on TTY; token chunks streamed live to stdout |
+| `json` | Single JSON object on completion; `{"ok":true,"data":{...}}` or `{"ok":false,"error":{...}}` |
+| `json` (streaming) | JSONL — one `{"event":"token_chunk","data":{...}}` per chunk, followed by `{"event":"done","data":{}}` |
+
+Streaming in `json` mode buffers to completion before emitting the final envelope. Use `print` for live streaming output.
+
+### Non-interactive mode
+
+Pass `--non-interactive` to prevent the CLI from prompting for input (browser opens, device code confirmations, missing config values). Any command that would otherwise prompt exits immediately with **code 3**.
+
+This flag is intended for CI pipelines and scripted automation.
+
+### Exit codes
+
+| Code | Meaning |
+|---|---|
+| 0 | Success |
+| 1 | General / runtime error |
+| 2 | Invalid arguments |
+| 3 | Auth required / auth failure / non-interactive prompt blocked |
+| 4 | Session not found |
+| 5 | Run execution failed |
+
+### Limitations
+
+- Sessions are in-memory only in this MVP; persistent session store integration in the CLI is deferred.
+- Auth login flows are validated but actual OAuth browser-open is deferred to Phase 11.
+- Streaming in `json` mode buffers to completion before output; use `print` for live output.
+- TUI integration is deferred to Phase 11.
+
+---
+
 ## Development status
 
 | Phase | Title | Status |
@@ -786,7 +960,7 @@ Errors include a structured `code` field for programmatic handling:
 | 7 | Session stores and durable memory backends | ✅ Complete |
 | 8 | Obsidian vault memory and personality system | ✅ Complete |
 | 9 | RPC API | ✅ Complete |
-| 10 | CLI | 🔲 Planned |
+| 10 | CLI | ✅ Complete |
 | 11 | Ratatui TUI | 🔲 Planned |
 | 12 | Observability, replay, and reliability hardening | 🔲 Planned |
 | 13 | Security hardening | 🔲 Planned |

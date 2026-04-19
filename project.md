@@ -774,30 +774,82 @@ Deliver a production-usable scriptable interface.
 
 ### Deliverables
 
-* [ ] print mode
-* [ ] JSON mode
-* [ ] non-interactive mode
-* [ ] piped I/O support
-* [ ] file/task execution mode
+* [x] print mode
+* [x] JSON mode
+* [x] non-interactive mode
+* [x] piped I/O support
+* [x] file/task execution mode
 
 ### Tasks
 
-* [ ] Implement CLI argument parsing
-* [ ] Implement prompt submission
-* [ ] Implement JSON output mode
-* [ ] Implement streaming terminal output
-* [ ] Implement file-based task execution
-* [ ] Implement session resume/select
-* [ ] Implement provider/model selection flags
-* [ ] Implement auth commands
-* [ ] Implement diagnostics commands
-* [ ] Add end-to-end CLI tests
+* [x] Implement CLI argument parsing
+* [x] Implement prompt submission
+* [x] Implement JSON output mode
+* [x] Implement streaming terminal output
+* [x] Implement file-based task execution
+* [x] Implement session resume/select
+* [x] Implement provider/model selection flags
+* [x] Implement auth commands
+* [x] Implement diagnostics commands
+* [x] Add end-to-end CLI tests
 
 ### Exit criteria
 
-* [ ] CLI supports interactive-enough scripting workflows
-* [ ] JSON mode is stable for automation
-* [ ] Operators can authenticate and run tasks from the terminal
+* [x] CLI supports interactive-enough scripting workflows
+* [x] JSON mode is stable for automation
+* [x] Operators can authenticate and run tasks from the terminal
+
+### Completion note — Phase 10
+
+**Completed.** The `rustpi` binary is implemented in the `cli` crate.
+
+#### Architecture
+
+| Module | Purpose |
+|---|---|
+| `src/args.rs` | `clap`-derived CLI definition — global flags, subcommand tree |
+| `src/output.rs` | Print (ANSI streaming) and JSON/JSONL output formatting |
+| `src/executor.rs` | Wraps `ServerState`, exposes typed `run`, `session`, `auth`, `diag` operations |
+| `src/error.rs` | `CliError` enum with deterministic exit-code mapping |
+| `src/commands/run.rs` | Prompt submission — argument, stdin pipe, and `--file` paths |
+| `src/commands/session.rs` | Session list / attach / detach / info |
+| `src/commands/auth.rs` | Auth status / login / logout per provider |
+| `src/commands/diag.rs` | System diagnostics report |
+
+#### Command reference
+
+```
+rustpi [OPTIONS] [COMMAND]
+  run [FLAGS] <PROMPT>   submit a prompt
+  session <SUBCOMMAND>   manage sessions
+  auth <SUBCOMMAND>      auth operations
+  diag                   system diagnostics
+```
+
+Global flags: `--output <print|json>`, `--provider <ID>`, `--model <ID>`, `--session-id <UUID>`, `--non-interactive`, `--config <PATH>`
+
+#### Output modes
+
+- **print** — human-readable streaming output; ANSI colour on TTY; token chunks streamed live.
+- **json** — machine-usable JSON. Success: `{"ok":true,"data":{...}}`. Error: `{"ok":false,"error":{"code":"...","message":"..."}}`. Streaming: JSONL with `{"event":"token_chunk","data":{...}}` per chunk.
+
+#### Exit codes
+
+| Code | Meaning |
+|---|---|
+| 0 | Success |
+| 1 | General / runtime error |
+| 2 | Invalid arguments |
+| 3 | Auth required / auth failure |
+| 4 | Session not found |
+| 5 | Run execution failed |
+
+#### Known limitations
+
+- Sessions are in-memory only in this MVP; no persistent session store integration in the CLI yet.
+- Auth login flows are validated but actual OAuth browser-open is deferred to Phase 11.
+- Streaming in non-print modes buffers to completion before output.
+- TUI integration deferred to Phase 11.
 
 ---
 
@@ -985,8 +1037,8 @@ Target phases:
 * [x] Phase 5
 * [x] Phase 6
 * [x] Phase 7
-* [ ] Phase 9
-* [ ] Phase 10
+* [x] Phase 9
+* [x] Phase 10
 
 Outcome:
 
