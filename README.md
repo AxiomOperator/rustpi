@@ -2,7 +2,7 @@
 
 A native Rust AI agent platform with multi-provider model access, durable sessions, Obsidian-backed local-first memory, and a rich terminal UI.
 
-**Status: Phases 0–12 complete — observability hardening done**
+**Status: Phases 0–14 complete — full-system testing and parity validation done**
 
 ---
 
@@ -43,13 +43,13 @@ session-store   event-log    config-core
 
 | Crate | Role | Status |
 |---|---|---|
-| `agent-core` | Shared types, `AgentEvent` hierarchy, core traits | ✅ Phase 1 |
+| `agent-core` | Shared types, `AgentEvent` hierarchy, core traits; **`Redactor`** (secrets redaction) | ✅ Phase 1/13 |
 | `config-core` | Layered config (global/user/project/runtime), TOML loading, merge rules | ✅ Phase 2 |
-| `policy-engine` | Allow/deny/approval rule evaluation with glob matching | ✅ Phase 2 |
+| `policy-engine` | Allow/deny/approval rule evaluation with glob matching; **glob-based tool/file/provider/auth policy** | ✅ Phase 2/13 |
 | `event-log` | Append-only JSONL event log, replay reader, audit records | ✅ Phase 2 |
-| `auth-core` | OAuth browser flow, RFC 8628 device flow, API key path, AES-256-GCM token store, refresh | ✅ Phase 3 |
+| `auth-core` | OAuth browser flow, RFC 8628 device flow, API key path, **AES-256-GCM `EncryptedFileTokenStore`**, refresh | ✅ Phase 3/13 |
 | `model-adapters` | `ModelProvider` trait, provider registry; OpenAI-compatible, llama.cpp, vLLM, and GitHub Copilot adapters | ✅ Phase 4 |
-| `tool-runtime` | Tool trait, registry, subprocess runner with timeout | ✅ Phase 5 |
+| `tool-runtime` | Tool trait, registry, subprocess runner with timeout; **`CommandPolicy`**, **`OverwritePolicy`**, **`AuditSink`**, **`PathSafetyPolicy`** | ✅ Phase 5/13 |
 | `context-engine` | Context window assembly, ignore rules, token budgeting | ✅ Phase 6 |
 | `session-store` | Durable session persistence (SQLite / sled / PostgreSQL); 4 store traits + config-driven factory; crash recovery | ✅ Phase 7/12 |
 | `memory-sync` | Qdrant semantic memory (`QdrantMemory`); Obsidian vault reader/writer, canonical docs, personality loader, sync engine | ✅ Phase 8 |
@@ -1214,6 +1214,170 @@ A lightweight projection of a run used during scanning — contains `run_id`, `s
 
 ---
 
+## Security Model
+
+rustpi implements a layered security model across authentication, tool execution, file access, secret handling, and audit logging.
+
+### Security controls summary
+
+| Control | What it protects | Where enforced | Configurable |
+|---------|-----------------|----------------|--------------|
+| AES-256-GCM token encryption | Auth token theft | `auth-core/EncryptedFileTokenStore` | Key path via config |
+| Secrets redaction | Secret leakage in logs/events | `agent-core/Redactor`, subprocess pipeline | Pattern list |
+| Path safety policy | Path traversal / unsafe file access | `tool-runtime/PathSafetyPolicy` | Allowed roots, deny list |
+| Command policy | Dangerous shell commands | `tool-runtime/CommandPolicy` | Built-in + custom rules |
+| Overwrite policy | Unsafe file overwrites | `tool-runtime/OverwritePolicy` | Allow / DenyExisting / RequireConfirmation |
+| Tool approval hooks | High/Critical tool execution | `tool-runtime/ApprovalHook` | DenyAbove threshold, AllowList |
+| Policy engine | Tool, file, provider, auth access | `policy-engine/PolicyEngine` | Glob rules, default policy |
+| Security audit log | Traceability of denials/approvals | `AgentEvent` variants, `AuditSink` | Via event bus |
+| Vault mutability | Memory vault doc integrity | `memory-sync/VaultAccessor` | Per-doc mutability |
+
+### Secure Token Storage
+
+Tokens are persisted encrypted at rest using AES-256-GCM in `~/.config/rustpi/tokens.enc`. The encryption key is stored at a configurable path (defaults to an adjacent file in the same directory).
+
+```rust
+// In config:
+// [auth]
+// token_store_path = "~/.config/rustpi/tokens.enc"
+// key_path = "~/.config/rustpi/tokens.key"  // optional override
+```
+
+**Limitation:** Key and ciphertext live in the same directory by default. Platform keyring integration (macOS Keychain, Secret Service, Windows DPAPI) is deferred.
+
+### Secrets Redaction
+
+`Redactor` in `crates/agent-core/src/redaction.rs` applies five compiled regex patterns:
+
+- Bearer tokens in `Authorization:` headers
+- API key prefixes: `sk-`, `ghp_`, `gho_`, `ghu_`, `ghs_`, `xoxb-`, `AKIA…`
+- Raw `Authorization:` header lines
+- `token=`, `secret=`, `password=` key-value assignments
+- Long base64-encoded credential blobs
+
+All matches are replaced with `[REDACTED]`. Integrated automatically into the `ShellTool` subprocess pipeline — every `ToolStdout` / `ToolStderr` line is scrubbed before reaching the event bus.
+
+To extend with custom patterns:
+```rust
+use agent_core::redaction::Redactor;
+
+// Redactor::new() accepts additional regex patterns
+let redactor = Redactor::with_extra_patterns(&["my-secret-prefix-[A-Za-z0-9]+"])?;
+```
+
+### Command Policy
+
+`CommandPolicy` in `crates/tool-runtime/src/command_policy.rs` uses first-match-wins rule evaluation. `ShellTool` loads `CommandPolicy::with_defaults()` automatically, which denies:
+
+- `rm -rf /` and `rm -rf /*`
+- `dd if=/dev/` (raw disk overwrite)
+- `mkfs*` (filesystem format commands)
+- `:(){ :|:& };:` (fork bomb)
+- `chmod -R 777 /` and `chmod 777 /`
+- `/dev/sda` writes and `shred /dev/`
+
+To customize:
+```rust
+use tool_runtime::command_policy::{CommandPolicy, CommandRule, CommandPattern, CommandAction};
+
+let policy = CommandPolicy::with_defaults()
+    .add_rule(CommandRule {
+        name: "no-curl-exfil".into(),
+        pattern: CommandPattern::Contains("curl http://evil.example".into()),
+        action: CommandAction::Deny("exfiltration target blocked".into()),
+    });
+
+let shell = ShellTool::new(path_policy).with_policy(policy);
+```
+
+### File Overwrite Safeguards
+
+`OverwritePolicy` in `crates/tool-runtime/src/overwrite_policy.rs` controls how `WriteFileTool` and `EditFileTool` behave when the target file already exists:
+
+| Variant | Behaviour |
+|---------|-----------|
+| `Allow` | Default; no additional checks |
+| `DenyExisting` | Rejects writes to existing paths; `ToolError::OverwriteDenied` |
+| `RequireConfirmation` | Requires `overwrite: true` in tool arguments; `ToolError::OverwriteNotConfirmed` |
+
+```rust
+use tool_runtime::{
+    overwrite_policy::OverwritePolicy,
+    tools::file::{WriteFileTool, EditFileTool},
+};
+
+let write = WriteFileTool::new_with_policy(path_policy.clone(), OverwritePolicy::RequireConfirmation);
+let edit  = EditFileTool::new_with_policy(path_policy.clone(), OverwritePolicy::DenyExisting);
+```
+
+### Security Audit Logging
+
+Six new `AgentEvent` variants carry structured denial/approval records emitted to the event bus:
+
+| Variant | When emitted |
+|---------|--------------|
+| `ApprovalDenied` | `ApprovalHook` rejects a tool call |
+| `ApprovalGranted` | `ApprovalHook` approves a tool call |
+| `CommandDenied` | `CommandPolicy` blocks a shell command (preview truncated to 100 chars) |
+| `PathDenied` | `PathSafetyPolicy` rejects a path |
+| `OverwriteBlocked` | `OverwritePolicy` blocks a file write |
+| `PolicyDenied` | `PolicyEngine` denies a request (domain + rule context) |
+
+Wire `AuditSink` into the tool runner to emit these events:
+
+```rust
+use tool_runtime::audit::AuditSink;
+
+let (event_tx, event_rx) = tokio::sync::broadcast::channel(128);
+let audit = AuditSink::new(event_tx.clone());
+
+let runner = ToolRunner::new(registry, Duration::from_secs(30))
+    .with_approval(approval_hook)
+    .with_event_tx(event_tx)
+    .with_audit_sink(audit);
+```
+
+All security events are serialised to the JSONL event log for later replay and audit via `rustpi replay --audit-only`.
+
+### Threat Model Summary
+
+#### Attack surfaces and mitigations
+
+| Attack surface | Threat | Mitigations |
+|----------------|--------|-------------|
+| Subprocess output | Secret leakage into logs or event bus | `Redactor` in pipeline (Phase 13) |
+| Shell tool | Dangerous commands — rm, disk overwrite, fork bomb | `CommandPolicy::with_defaults()` (Phase 13); `ApprovalHook` Critical sensitivity (Phase 5) |
+| File tools | Unintended overwrite of existing files | `OverwritePolicy` (Phase 13); `PathSafetyPolicy` traversal guard (Phase 5) |
+| Path arguments | Directory traversal outside workspace | `PathSafetyPolicy` allowed roots + deny list (Phase 5) |
+| Token storage | Auth token theft from disk | AES-256-GCM `EncryptedFileTokenStore` (Phase 3) |
+| Tool approval gaps | High/Critical tools running without oversight | `AuditSink` events (Phase 13); `DenyAbove` / `AllowList` hooks (Phase 5) |
+| Policy bypass | Tool/file/provider access outside rules | `AuditSink` `PolicyDenied` event (Phase 13); `PolicyEngine` glob rules (Phase 2) |
+| Vault mutation | Runtime corrupting human-authored vault sections | `VaultAccessor` per-doc mutability modes (Phase 8) |
+
+#### Residual risks (deferred)
+
+- Platform keyring integration — key and ciphertext co-located on disk
+- Command policy uses substring matching, not shell AST parsing
+- Regex redaction may miss obfuscated or split secrets
+- No network egress controls on provider adapters or subprocess
+- No rate limiting on RPC/CLI surfaces
+- No Prometheus/OTEL security metrics exporter
+
+### Security Testing
+
+```bash
+# Run all security-related tests
+cargo test --workspace
+
+# Targeted security crate tests
+cargo test -p agent-core        # Redactor unit tests
+cargo test -p tool-runtime      # CommandPolicy, OverwritePolicy, AuditSink, PathSafetyPolicy tests
+cargo test -p auth-core         # EncryptedFileTokenStore tests
+cargo test -p policy-engine     # PolicyEngine rule evaluation tests
+```
+
+---
+
 
 
 | Phase | Title | Status |
@@ -1231,8 +1395,8 @@ A lightweight projection of a run used during scanning — contains `run_id`, `s
 | 10 | CLI | ✅ Complete |
 | 11 | Ratatui TUI | ✅ Complete |
 | 12 | Observability, replay, and reliability hardening | ✅ Complete |
-| 13 | Security hardening | 🔲 Planned |
-| 14 | Full-system testing and parity validation | 🔲 Planned |
+| 13 | Security hardening | ✅ Complete |
+| 14 | Full-system testing and parity validation | ✅ Complete |
 
 See [`project.md`](./project.md) for detailed checklists and exit criteria per phase.
 
@@ -1298,6 +1462,56 @@ Authentication uses the GitHub device flow:
 rustpi auth login --provider copilot
 # Follow the device code instructions to authenticate
 ```
+
+---
+
+---
+
+## Testing
+
+### Test strategy
+
+rustpi's test suite is organised in five layers:
+
+1. **Unit tests** (`#[cfg(test)]` modules inline in each crate's `src/`) — validate individual functions, type invariants, and error paths in isolation.
+2. **Integration tests** (`crates/*/tests/`) — exercise public APIs across crate boundaries, including backend parity macros that run the same assertions against SQLite and sled.
+3. **Provider matrix tests** (`crates/model-adapters/tests/`) — wiremock mock HTTP servers validate request formatting, streaming, error normalisation, and 429/503 handling across OpenAI-compatible, llama.cpp, and vLLM adapters without requiring live API credentials.
+4. **Backend matrix tests** (`crates/session-store/tests/`, `crates/memory-sync/tests/`) — SQLite and sled backends run offline; PostgreSQL and Qdrant tests are marked `#[ignore]` and require live services.
+5. **Failure mode tests** — deliberate error-path coverage: stream connection drop, provider timeout, shell timeout, nonexistent command, corrupted JSONL, invalid UTF-8, partial replay log.
+
+### How to run
+
+| Category | Command | Notes |
+|---|---|---|
+| All tests | `cargo test --workspace` | Requires no external services |
+| Unit only | `cargo test --workspace --lib` | |
+| Provider matrix | `cargo test -p model-adapters` | Uses wiremock mock servers |
+| Backend matrix | `cargo test -p session-store -p memory-sync` | SQLite/sled offline; PG/Qdrant `#[ignore]` |
+| Lifecycle integration | `cargo test -p agent-core` | Runs on a tmpdir; no external deps |
+| Failure modes | `cargo test -p tool-runtime -p event-log -p auth-core` | |
+| PostgreSQL tests | `DATABASE_URL=postgres://... cargo test -p session-store -- --include-ignored postgres` | Requires live PG |
+| Qdrant tests | `cargo test -p memory-sync -- --include-ignored qdrant` | Requires live Qdrant |
+
+Current workspace total: **~601 test functions**, 0 failures on `cargo test --workspace`.
+
+### Manual test checklists
+
+For features that cannot be fully covered by automated tests:
+
+- [`docs/testing/cli-tui-checklist.md`](./docs/testing/cli-tui-checklist.md) — 85 items covering CLI commands, TUI interaction, streaming output, and keyboard shortcuts
+- [`docs/testing/memory-sync-checklist.md`](./docs/testing/memory-sync-checklist.md) — 37 items covering vault sync, conflict resolution, and personality loading
+- [`docs/testing/release-readiness-checklist.md`](./docs/testing/release-readiness-checklist.md) — 40 items across 8 sections for pre-release validation
+
+### Known limitations
+
+The following are **not** covered by the automated test suite:
+
+- **Live OAuth browser flow** — `AuthFlow::OAuthBrowser` opens the system browser; cannot be exercised in CI.
+- **Live provider API calls** — all provider tests use wiremock stubs; no real OpenAI/Copilot/Gemini calls are made.
+- **TUI terminal interaction** — Ratatui rendering and keyboard input are not tested programmatically; covered by the CLI/TUI checklist.
+- **RPC model passthrough** — `run_start` in the RPC server currently drives a simulated token stream, not a real model adapter; end-to-end model-via-RPC is deferred.
+- **Gemini adapter** — declared in the provider list but not yet implemented; only OpenAI-compatible, llama.cpp, vLLM, and Copilot adapters exist.
+- **Embedding-based ANN search** — `QdrantMemory::search_similar()` requires pre-computed embeddings; no embedding model is wired in, so semantic search falls back to scroll + keyword filtering.
 
 ---
 

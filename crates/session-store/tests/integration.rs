@@ -300,10 +300,11 @@ async fn search_memories_respects_limit() {
 #[tokio::test]
 async fn factory_build_session_store_sqlite() {
     let dir = TempDir::new().expect("tempdir");
-    let db_path = dir.path().join("factory.db");
-    // Override the home-derived path by constructing the config with an absolute URL.
-    // The factory uses $HOME, so we exercise it by temporarily pointing HOME at our dir.
+    // Override HOME so the factory derives its path under our tempdir.
+    // NOTE: set_var is a global mutation; this test is intentionally simple and
+    // relies on the factory creating the file via ?mode=rwc in the URL.
     std::env::set_var("HOME", dir.path());
+    std::fs::create_dir_all(dir.path().join(".rustpi")).ok();
 
     let config = MemoryConfig {
         session_backend: SessionBackend::Sqlite,
@@ -312,15 +313,6 @@ async fn factory_build_session_store_sqlite() {
         qdrant_url: None,
         postgres_url: None,
     };
-
-    // Ensure the directory exists.
-    std::fs::create_dir_all(dir.path().join(".rustpi")).ok();
-    // Pre-create the SQLite file; the factory URL doesn't include ?mode=rwc.
-    let pre_url = format!(
-        "sqlite://{}?mode=rwc",
-        dir.path().join(".rustpi/sessions.db").display()
-    );
-    SqliteBackend::connect(&pre_url).await.expect("pre-create sqlite file");
 
     let result = build_session_store(&config).await;
     assert!(result.is_ok(), "factory build_session_store(sqlite) failed: {:?}", result.err());
@@ -417,8 +409,73 @@ async fn postgres_session_crud() {
     use session_store::postgres::PostgresBackend;
     let url = std::env::var("TEST_POSTGRES_URL")
         .unwrap_or_else(|_| "postgres://postgres:postgres@localhost/rustpi_test".to_string());
-    let backend = PostgresBackend::connect(&url).await.expect("postgres connect");
+    let backend = match PostgresBackend::connect(&url).await {
+        Ok(b) => b,
+        Err(e) => { eprintln!("skip: {e}"); return; }
+    };
     let session = backend.create_session().await.expect("create_session");
     let fetched = backend.get_session(&session.id).await.expect("get_session");
     assert_eq!(session.id, fetched.id);
+    assert_eq!(session.summary, fetched.summary);
+
+    backend.update_summary(&session.id, "pg summary").await.expect("update_summary");
+    let updated = backend.get_session(&session.id).await.expect("get after update");
+    assert_eq!(updated.summary.as_deref(), Some("pg summary"));
+}
+
+#[tokio::test]
+#[ignore = "requires live PostgreSQL instance"]
+async fn postgres_run_crud() {
+    use session_store::postgres::PostgresBackend;
+    let url = std::env::var("TEST_POSTGRES_URL")
+        .unwrap_or_else(|_| "postgres://postgres:postgres@localhost/rustpi_test".to_string());
+    let backend = match PostgresBackend::connect(&url).await {
+        Ok(b) => b,
+        Err(e) => { eprintln!("skip: {e}"); return; }
+    };
+    let session = backend.create_session().await.expect("create_session");
+    let run = backend.create_run(session.id.clone()).await.expect("create_run");
+    assert!(matches!(run.status, RunStatus::Running));
+    assert_eq!(run.session_id, session.id);
+
+    backend
+        .update_run_status(&run.id, RunStatus::Completed)
+        .await
+        .expect("update_run_status");
+
+    let fetched = backend.get_run(&run.id).await.expect("get_run");
+    assert!(matches!(fetched.status, RunStatus::Completed));
+    assert!(fetched.completed_at.is_some());
+
+    let runs = backend.list_runs(&session.id).await.expect("list_runs");
+    assert_eq!(runs.len(), 1);
+    assert_eq!(runs[0].id, run.id);
+}
+
+#[tokio::test]
+#[ignore = "requires live PostgreSQL instance"]
+async fn postgres_memory_crud() {
+    use session_store::postgres::PostgresBackend;
+    let url = std::env::var("TEST_POSTGRES_URL")
+        .unwrap_or_else(|_| "postgres://postgres:postgres@localhost/rustpi_test".to_string());
+    let backend = match PostgresBackend::connect(&url).await {
+        Ok(b) => b,
+        Err(e) => { eprintln!("skip: {e}"); return; }
+    };
+    let mem = backend
+        .save_memory(None, "pg memory content", &["pg-tag-a", "pg-tag-b"])
+        .await
+        .expect("save_memory");
+    let fetched = backend.get_memory(&mem.id).await.expect("get_memory");
+    assert_eq!(fetched.id, mem.id);
+    assert_eq!(fetched.content, "pg memory content");
+    assert!(fetched.tags.contains(&"pg-tag-a".to_string()));
+
+    backend.delete_memory(&mem.id).await.expect("delete_memory");
+    let err = backend.get_memory(&mem.id).await;
+    assert!(
+        matches!(err, Err(StoreError::MemoryNotFound(_))),
+        "expected MemoryNotFound after delete, got: {:?}",
+        err
+    );
 }

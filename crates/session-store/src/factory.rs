@@ -12,7 +12,7 @@ use std::sync::Arc;
 
 fn default_sqlite_path() -> String {
     let home = std::env::var("HOME").unwrap_or_else(|_| ".".to_string());
-    format!("sqlite://{home}/.rustpi/sessions.db")
+    format!("sqlite://{home}/.rustpi/sessions.db?mode=rwc")
 }
 
 fn default_sled_path() -> String {
