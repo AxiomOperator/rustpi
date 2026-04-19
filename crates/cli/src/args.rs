@@ -67,6 +67,18 @@ pub enum Command {
 
     /// Print diagnostics: config, providers, backend info, auth status.
     Diag,
+
+    /// Replay a session's event timeline.
+    Replay {
+        /// Session ID to replay (replays all events if omitted).
+        session_id: Option<String>,
+        /// Show only audit-relevant events.
+        #[arg(long)]
+        audit_only: bool,
+        /// Show only failure events.
+        #[arg(long)]
+        failures_only: bool,
+    },
 }
 
 /// Arguments for `rustpi run`.

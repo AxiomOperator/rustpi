@@ -13,6 +13,7 @@ members = [
     "crates/session-store",
     "crates/tool-runtime",
     "crates/tui",
+    "crates/observability",
 ]
 resolver = "2"
 

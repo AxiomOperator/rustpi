@@ -2,6 +2,7 @@
 
 use agent_core::types::ProviderId;
 use config_core::model::{Config, OutputFormat as CfgOutputFormat, ProviderAuthConfig, ProviderKind};
+use event_log::{FileEventStore, ReplayReader};
 
 use crate::{
     args::OutputFormat,
@@ -173,6 +174,10 @@ async fn diag_print(config: &Config, output: &Output, executor: &Executor) -> Cl
     );
 
     output.print_blank();
+
+    // --- Event Log ---
+    diag_event_log(output).await;
+
     Ok(())
 }
 
@@ -236,6 +241,66 @@ async fn diag_json(config: &Config, output: &Output, executor: &Executor) -> Cli
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
+
+/// Print event-log diagnostics section.
+async fn diag_event_log(output: &Output) {
+    let home = std::env::var("HOME").unwrap_or_else(|_| ".".to_string());
+    let path = std::path::PathBuf::from(&home).join(".rustpi/events.jsonl");
+
+    output.print_header("Event Log");
+
+    if path.exists() {
+        match FileEventStore::open(&path).await {
+            Ok(store) => {
+                let reader = ReplayReader::from_file_tolerant(&store).await;
+                let failures = reader.recent_failures(5);
+                let incomplete = reader.incomplete_runs();
+                output.print_kv("log_path", &path.display().to_string());
+                output.print_kv("total_events", &reader.all().len().to_string());
+
+                output.print_kv(
+                    "recent_failures",
+                    &if failures.is_empty() {
+                        "none".to_string()
+                    } else {
+                        failures
+                            .iter()
+                            .map(|r| {
+                                serde_json::to_value(&r.event)
+                                    .ok()
+                                    .and_then(|v| v.get("type").and_then(|t| t.as_str()).map(String::from))
+                                    .unwrap_or_else(|| "<unknown>".to_string())
+                            })
+                            .collect::<Vec<_>>()
+                            .join(", ")
+                    },
+                );
+                output.print_kv(
+                    "incomplete_runs",
+                    &if incomplete.is_empty() {
+                        "none".to_string()
+                    } else {
+                        format!(
+                            "{} run(s): {}",
+                            incomplete.len(),
+                            incomplete
+                                .iter()
+                                .map(|r| format!("{} ({:?})", &r.run_id[..8], r.state))
+                                .collect::<Vec<_>>()
+                                .join(", ")
+                        )
+                    },
+                );
+            }
+            Err(e) => {
+                output.print_kv("status", &format!("error reading log: {}", e));
+            }
+        }
+    } else {
+        output.print_kv("status", "No event log connected");
+        output.print_kv("hint", "run `rustpi replay` to inspect a log file");
+    }
+}
 
 fn opt_str(s: Option<&str>) -> String {
     s.unwrap_or("-").to_string()

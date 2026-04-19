@@ -93,7 +93,7 @@ pub async fn refresh_token(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{AuthFlow, ProviderId};
+    use crate::{AuthError, AuthFlow, ProviderId};
     use chrono::Utc;
 
     fn make_record(expires_at: Option<chrono::DateTime<Utc>>) -> TokenRecord {
@@ -124,5 +124,43 @@ mod tests {
     fn needs_refresh_false_for_token_with_no_expiry() {
         let r = make_record(None);
         assert!(!needs_refresh(&r));
+    }
+
+    // -----------------------------------------------------------------------
+    // Phase 12 chaos / failure tests
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn chaos_needs_refresh_true_for_already_expired_token() {
+        // A token that expired 1 hour ago must need refresh.
+        let r = make_record(Some(Utc::now() - chrono::Duration::hours(1)));
+        assert!(needs_refresh(&r), "an already-expired token must need refresh");
+    }
+
+    #[tokio::test]
+    async fn chaos_refresh_no_refresh_token_returns_error() {
+        // Calling refresh_token on a record with no refresh_token must return
+        // AuthError::NoRefreshToken — not panic, not silently succeed.
+        let mut r = make_record(Some(Utc::now() + chrono::Duration::minutes(2)));
+        r.refresh_token = None;
+
+        let result = refresh_token(&r, "https://example.invalid/token", "client-id", None).await;
+        assert!(
+            matches!(result, Err(AuthError::NoRefreshToken(_))),
+            "expected NoRefreshToken error, got: {result:?}"
+        );
+    }
+
+    #[tokio::test]
+    async fn chaos_refresh_expired_token_no_refresh_token_returns_error() {
+        // Fully expired token with no refresh_token: must return NoRefreshToken error.
+        let mut r = make_record(Some(Utc::now() - chrono::Duration::hours(1)));
+        r.refresh_token = None;
+
+        let result = refresh_token(&r, "https://example.invalid/token", "client-id", None).await;
+        assert!(
+            matches!(result, Err(AuthError::NoRefreshToken(_))),
+            "expired token with no refresh_token must yield NoRefreshToken"
+        );
     }
 }

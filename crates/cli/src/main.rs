@@ -109,6 +109,16 @@ async fn run() -> i32 {
         Some(Command::Diag) => {
             cli::commands::diag::diag_command(&config, &output, &executor).await
         }
+
+        Some(Command::Replay { session_id, audit_only, failures_only }) => {
+            cli::commands::replay::replay_command(
+                session_id.as_deref(),
+                audit_only,
+                failures_only,
+                &output,
+            )
+            .await
+        }
     };
 
     match result {

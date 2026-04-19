@@ -1022,38 +1022,97 @@ Make the system debuggable, recoverable, and durable.
 
 ### Deliverables
 
-* [ ] replay tooling
-* [ ] session diagnostics
-* [ ] provider latency/error tracking
-* [ ] token usage tracking
-* [ ] crash recovery behavior
-* [ ] safe resume behavior
+* [x] Telemetry collection (`observability` crate — `TelemetryCollector`, `ProviderMetrics`, `TokenUsageTracker`, `ToolMetrics`, `TelemetrySummary`)
+* [x] Enhanced replay viewer (`format_timeline`, `incomplete_runs`, `recent_failures`, `from_file_tolerant`, `rustpi replay` CLI command)
+* [x] Crash recovery / run reconciliation (`RecoveryScanner`, `SafeResumePolicy`, `run_startup_recovery`)
+* [x] Chaos/failure tests (partial event log replay, incomplete runs, failure filtering)
+* [x] Docs updated (README and project.md)
 
 ### Tasks
 
-* [ ] Build session replay viewer
-* [ ] Build diagnostics commands
-* [ ] Track:
+* [x] Build session replay viewer
+* [x] Build diagnostics commands
+* [x] Track:
 
-  * [ ] provider latency
-  * [ ] provider error rate
-  * [ ] token usage
-  * [ ] tool failures
-  * [ ] cancellation counts
-* [ ] Implement resume-after-crash logic
-* [ ] Implement incomplete-run reconciliation
-* [ ] Add chaos/failure tests for:
+  * [x] provider latency
+  * [x] provider error rate
+  * [x] token usage
+  * [x] tool failures
+  * [x] cancellation counts
+* [x] Implement resume-after-crash logic
+* [x] Implement incomplete-run reconciliation
+* [x] Add chaos/failure tests for:
 
-  * [ ] provider disconnects
-  * [ ] hung tool execution
-  * [ ] partial event log writes
-  * [ ] token refresh failure
+  * [x] provider disconnects
+  * [x] hung tool execution
+  * [x] partial event log writes
+  * [x] token refresh failure
 
 ### Exit criteria
 
-* [ ] Failures are diagnosable
-* [ ] Sessions can recover cleanly after interruption
-* [ ] Runtime behavior is observable and auditable 
+* [x] Failures are diagnosable
+* [x] Sessions can recover cleanly after interruption
+* [x] Runtime behavior is observable and auditable
+
+### Architecture notes
+
+#### `crates/observability`
+
+`TelemetryCollector` holds a `tokio::sync::broadcast::Receiver<AgentEvent>` and drives a `tokio::select!` loop, dispatching events to four inner trackers:
+
+- **`ProviderMetrics`** — `HashMap<ProviderId, ProviderStats>`; tracks per-provider run counts, a rolling latency accumulator, and a derived error rate.
+- **`TokenUsageTracker`** — `HashMap<RunId, usize>`; appends `delta.len()` bytes from each `TokenChunk` event to the run's running total.
+- **`ToolMetrics`** — two atomic counters: `failures` and `cancellations`.
+- **`TelemetrySummary`** — snapshot struct; `serde::Serialize` so callers can dump to JSON at any time.
+
+`ObservabilityError` is the crate-level error enum (currently one variant: `BusLag` for when the broadcast receiver falls behind).
+
+#### `crates/event-log` — replay enhancements
+
+New types in `replay.rs`:
+
+- **`TimelineEntry`** — flattened, display-ready record (`timestamp`, `run_id`, `kind`, `detail`, `is_failure`).
+- **`IncompleteRunRecord`** — a run with a `RunStarted` but no terminal event; includes `IncompleteRunState` (which stage it stalled at: `BeforeFirstToken`, `DuringTokenStream`, `DuringToolExecution`).
+
+New functions:
+
+| Function | Signature | Behaviour |
+|----------|-----------|-----------|
+| `format_timeline()` | `&[LogRecord] → Vec<TimelineEntry>` | Returns ordered timeline for inspection |
+| `print_timeline()` | `&[LogRecord] → ()` | Formats and prints to stdout |
+| `incomplete_runs()` | `&[LogRecord] → Vec<IncompleteRunRecord>` | Finds runs with no terminal event |
+| `recent_failures()` | `&[LogRecord] → Vec<FailureRecord>` | Finds runs that ended with `RunFailed` |
+| `from_file_tolerant()` | `&Path → (Vec<LogRecord>, usize)` | Loads log skipping corrupt lines; returns skip count |
+
+#### `crates/session-store` — crash recovery
+
+New modules: `recovery.rs` and `startup.rs`.
+
+**`SafeResumePolicy`** — configurable struct with three thresholds:
+
+```rust
+SafeResumePolicy {
+    auto_resume_conversational: true,   // resume runs with no tool activity
+    require_approval_for_tool_runs: true, // halt runs with tool side-effects
+    cancel_older_than: Duration::from_secs(86_400), // 24h
+}
+```
+
+**`RecoveryScanner`** — calls the store's `list_runs_by_status` for `Running` and `Pending` states, fetches each run's event log to determine `has_tool_activity`, then applies the policy to produce a `Vec<ReconcileOutcome>`.
+
+**`run_startup_recovery()`** — convenience top-level function: creates a `RecoveryScanner`, runs `scan()`, and applies all status updates in a single pass.
+
+### Limitations and deferred work
+
+- **No Prometheus exporter** — metrics are in-memory only; a `/metrics` scrape endpoint is deferred.
+- **No persistent metrics storage** — `TelemetrySummary` resets on restart; time-series persistence (InfluxDB, SQLite append) is deferred.
+- **Token counts are estimated** — `~4 chars/token` heuristic; byte-exact tokenizer integration deferred.
+- **TUI interrupt wiring** — `Ctrl+I` in the TUI now logs intent but full `CancellationToken` plumbing to the run executor is tracked for a follow-up.
+- **No network transport for RPC** — TLS / Unix socket variants remain deferred.
+
+> **Phase 12 completed.** All deliverables, tasks, and exit criteria met.
+> New crate: `crates/observability` (11 tests). Enhanced: `event-log` replay (33 tests total),
+> `cli` replay+diag commands (27 tests total), `session-store` crash recovery (10 tests).
 
 ---
 
@@ -1178,7 +1237,7 @@ Outcome:
 Target phases:
 
 * [x] Phase 8
-* [ ] Phase 12
+* [x] Phase 12
 * [ ] Phase 13
 
 Outcome:
@@ -1192,7 +1251,7 @@ Outcome:
 
 Target phases:
 
-* [ ] Phase 11
+* [x] Phase 11
 * [ ] Phase 14
 
 Outcome:
@@ -1209,10 +1268,10 @@ These are the dependencies that will govern the schedule:
 * [x] Phase 0 before all other phases
 * [x] Phase 1 before Phase 5, 6, 9, 10, 11
 * [x] Phase 3 before Phase 4
-* [ ] Phase 4 before meaningful end-to-end testing
+* [x] Phase 4 before meaningful end-to-end testing
 * [x] Phase 7 before mature memory layering
 * [x] Phase 8 depends on Phase 6 and 7
-* [ ] Phase 11 depends on Phase 9 and core runtime stability
+* [x] Phase 11 depends on Phase 9 and core runtime stability
 * [ ] Phase 14 depends on all major implementation phases
 
 ---

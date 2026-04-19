@@ -99,6 +99,31 @@ impl FileEventStore {
         }
         Ok(records)
     }
+    /// Like `replay_all` but skips lines that fail to decode rather than returning an error.
+    /// Useful for reading partially-corrupt or truncated log files.
+    pub async fn replay_all_tolerant(&self) -> Vec<EventRecord> {
+        if !self.path.exists() {
+            return Vec::new();
+        }
+        let file = match tokio::fs::File::open(&self.path).await {
+            Ok(f) => f,
+            Err(_) => return Vec::new(),
+        };
+        let reader = BufReader::new(file);
+        let mut lines = reader.lines();
+        let mut records = Vec::new();
+        while let Ok(Some(line)) = lines.next_line().await {
+            let trimmed = line.trim();
+            if trimmed.is_empty() {
+                continue;
+            }
+            if let Ok(record) = decode_record(trimmed) {
+                records.push(record);
+            }
+            // Silently skip malformed lines.
+        }
+        records
+    }
 }
 
 #[async_trait::async_trait]

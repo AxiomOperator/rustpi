@@ -356,4 +356,66 @@ mod tests {
         let store = EncryptedFileTokenStore::new(dir.path()).unwrap();
         assert!(store.load_record(&ProviderId::new("nobody")).unwrap().is_none());
     }
+
+    // -----------------------------------------------------------------------
+    // Phase 12 chaos / failure tests
+    // -----------------------------------------------------------------------
+
+    #[tokio::test]
+    async fn chaos_memory_store_load_missing_provider_returns_ok_none() {
+        // Loading an unknown provider from MemoryTokenStore must return Ok(None), not an error.
+        let store = MemoryTokenStore::new();
+        let result = store.load(&ProviderId::new("nonexistent-provider")).await;
+        assert!(result.is_ok(), "load should succeed for unknown provider");
+        assert!(result.unwrap().is_none(), "load should return None for unknown provider");
+    }
+
+    #[tokio::test]
+    async fn chaos_memory_store_expired_token_returns_expired_state() {
+        // A token that is already expired should surface as AuthState::Expired, not panic.
+        let store = MemoryTokenStore::new();
+        let expired_record = TokenRecord {
+            provider_id: ProviderId::new("openai"),
+            access_token: "expired-tok".into(),
+            refresh_token: None,
+            expires_at: Some(Utc::now() - chrono::Duration::hours(1)),
+            scopes: vec![],
+            flow: AuthFlow::OAuthBrowser,
+            stored_at: Utc::now(),
+        };
+        store.save_record(expired_record);
+
+        let state = store.load(&ProviderId::new("openai")).await.unwrap();
+        assert!(
+            matches!(state, Some(AuthState::Expired { .. })),
+            "expired token must surface as AuthState::Expired, got: {state:?}"
+        );
+    }
+
+    #[tokio::test]
+    async fn chaos_memory_store_empty_access_token_stores_without_panic() {
+        // An empty access token must be stored and retrieved without panicking.
+        let store = MemoryTokenStore::new();
+        let record = TokenRecord {
+            provider_id: ProviderId::new("test-provider"),
+            access_token: String::new(), // deliberately empty
+            refresh_token: None,
+            expires_at: Some(Utc::now() + chrono::Duration::hours(1)),
+            scopes: vec![],
+            flow: AuthFlow::ApiKey,
+            stored_at: Utc::now(),
+        };
+        store.save_record(record);
+        let loaded = store.load_record(&ProviderId::new("test-provider"));
+        assert!(loaded.is_some(), "record with empty token should be stored");
+        assert_eq!(loaded.unwrap().access_token, "", "access_token should remain empty");
+    }
+
+    #[tokio::test]
+    async fn chaos_memory_store_delete_nonexistent_does_not_error() {
+        // Deleting a provider that was never stored must succeed gracefully.
+        let store = MemoryTokenStore::new();
+        let result = store.delete(&ProviderId::new("ghost-provider")).await;
+        assert!(result.is_ok(), "deleting a nonexistent provider should not return an error");
+    }
 }

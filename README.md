@@ -2,7 +2,7 @@
 
 A native Rust AI agent platform with multi-provider model access, durable sessions, Obsidian-backed local-first memory, and a rich terminal UI.
 
-**Status: Phases 0–11 complete — TUI live**
+**Status: Phases 0–12 complete — observability hardening done**
 
 ---
 
@@ -22,7 +22,7 @@ rustpi is a fully local, operator-controlled AI agent runtime written in Rust. I
 
 ## Architecture
 
-rustpi is a Cargo workspace of 13 focused library crates and two binary entry points. The dependency graph flows strictly upward — primitive types live at the bottom, binaries at the top, with no circular dependencies.
+rustpi is a Cargo workspace of 14 focused library crates and two binary entry points. The dependency graph flows strictly upward — primitive types live at the bottom, binaries at the top, with no circular dependencies.
 
 ```
 cli / tui  (binaries)
@@ -31,8 +31,8 @@ rpc-api ────────────────────────
     │                                     │
 model-adapters  tool-runtime  context-engine  memory-sync
     │               │
-auth-core       policy-engine
-    │               │
+auth-core       policy-engine     observability
+    │               │                   │
 session-store   event-log    config-core
     └───────────────┴────────────┘
                     │
@@ -51,11 +51,12 @@ session-store   event-log    config-core
 | `model-adapters` | `ModelProvider` trait, provider registry; OpenAI-compatible, llama.cpp, vLLM, and GitHub Copilot adapters | ✅ Phase 4 |
 | `tool-runtime` | Tool trait, registry, subprocess runner with timeout | ✅ Phase 5 |
 | `context-engine` | Context window assembly, ignore rules, token budgeting | ✅ Phase 6 |
-| `session-store` | Durable session persistence (SQLite / sled / PostgreSQL); 4 store traits + config-driven factory | ✅ Phase 7 |
+| `session-store` | Durable session persistence (SQLite / sled / PostgreSQL); 4 store traits + config-driven factory; crash recovery | ✅ Phase 7/12 |
 | `memory-sync` | Qdrant semantic memory (`QdrantMemory`); Obsidian vault reader/writer, canonical docs, personality loader, sync engine | ✅ Phase 8 |
 | `rpc-api` | stdin/stdout JSONL RPC server — session attach/detach, run start/cancel, auth status, capabilities | ✅ Phase 9 |
-| `cli` | Scriptable CLI binary (`rustpi`) | ✅ Phase 10 |
+| `cli` | Scriptable CLI binary (`rustpi`); `replay` and enhanced `diag` commands | ✅ Phase 10/12 |
 | `tui` | Ratatui full-screen TUI binary (`rustpi-tui`) | ✅ Phase 11 |
+| `observability` | `TelemetryCollector`, `ProviderMetrics`, `TokenUsageTracker`, `ToolMetrics`, `TelemetrySummary` | ✅ Phase 12 |
 
 ---
 
@@ -799,7 +800,8 @@ cargo install --path crates/cli
 | `rustpi auth status [--provider <ID>]` | Check auth state for all or one provider |
 | `rustpi auth login --provider <ID>` | Start an auth flow for a provider |
 | `rustpi auth logout --provider <ID>` | Revoke stored credentials for a provider |
-| `rustpi diag` | Print a system diagnostics report |
+| `rustpi replay [--session-id <ID>]` | View the event timeline for a session |
+| `rustpi diag` | Print a system diagnostics report (includes event log section) |
 
 ### Global flags
 
@@ -903,11 +905,30 @@ rustpi auth logout --provider openai
 #### Diagnostics
 
 ```sh
-# Human-readable report
+# Human-readable report (includes event log section: recent failures + incomplete runs)
 rustpi diag
 
 # Machine-readable
 rustpi diag --output json
+```
+
+#### Replay viewer
+
+```sh
+# Show the full event timeline (loads real event log if available; falls back to demo data)
+rustpi replay
+
+# Filter to a specific session
+rustpi replay --session-id <UUID>
+
+# Show only failed runs
+rustpi replay --failures-only
+
+# Show only the audit log (no token/response content)
+rustpi replay --audit-only
+
+# Machine-readable JSON timeline
+rustpi replay --output json
 ```
 
 ### Output modes
@@ -1026,7 +1047,174 @@ While a run is active (`[Run: active]` in the status bar), press `Ctrl+I` to req
 
 ---
 
-## Development status
+## Observability / Telemetry
+
+The `crates/observability` crate provides real-time metrics collection by subscribing to the `EventBus` broadcast channel. No additional instrumentation is required — every `AgentEvent` the runtime already emits is automatically captured.
+
+### What is tracked
+
+| Metric | Source | Details |
+|--------|--------|---------|
+| Runs started / failed / cancelled | `RunStarted`, `RunFailed`, `RunCancelled` events | Per provider |
+| Provider latency | `RunStarted` → `RunCompleted` wall-clock delta | Per model provider |
+| Provider error rate | failed / (started) | Per provider |
+| Token usage per run | `TokenChunk.delta` length accumulation | Estimated; per run ID |
+| Tool failures | `ToolExecutionFailed` events | Cumulative counter |
+| Tool cancellations | `ToolExecutionCancelled` events | Cumulative counter |
+
+### Components
+
+| Type | Role |
+|------|------|
+| `TelemetryCollector` | Subscribes to the `EventBus` broadcast; dispatches events to the individual trackers |
+| `ProviderMetrics` | Per-provider counters: runs started, failed, cancelled; latency histogram; error rate |
+| `TokenUsageTracker` | Accumulates estimated token deltas per `RunId` |
+| `ToolMetrics` | Failure and cancellation counters across all tools |
+| `TelemetrySummary` | Point-in-time snapshot of all metrics; serialises to JSON |
+| `ObservabilityError` | Error type for the crate |
+
+### Getting a snapshot
+
+```rust
+use observability::TelemetryCollector;
+
+// Wire up collector on startup (give it the broadcast receiver from EventBus)
+let collector = TelemetryCollector::new(event_rx);
+tokio::spawn(collector.run());
+
+// Anywhere in the runtime — take a snapshot
+let summary: TelemetrySummary = collector.snapshot();
+let json = serde_json::to_string_pretty(&summary)?;
+println!("{json}");
+```
+
+```json
+{
+  "providers": {
+    "openai": {
+      "runs_started": 42,
+      "runs_failed": 1,
+      "runs_cancelled": 0,
+      "error_rate": 0.024,
+      "mean_latency_ms": 1340
+    }
+  },
+  "token_usage": {
+    "<run-uuid>": 812
+  },
+  "tool_failures": 2,
+  "tool_cancellations": 0
+}
+```
+
+### Limitations
+
+- Token counts are **estimated** from `TokenChunk.delta` byte length (same `~4 chars/token` heuristic used elsewhere); byte-exact tokenizer integration is deferred.
+- Metrics are **in-memory only** — they reset on process restart. Persistent metrics storage (e.g. Prometheus exporter, InfluxDB sink) is deferred to a future phase.
+- No Prometheus `/metrics` endpoint yet.
+
+---
+
+## Replay Viewer
+
+The `rustpi replay` command loads the on-disk event log and renders a human-readable timeline of all agent activity, for debugging and audit.
+
+### Usage
+
+```sh
+# Full timeline for the default session
+rustpi replay
+
+# Scoped to one session
+rustpi replay --session-id <UUID>
+
+# Show only runs that ended with a failure
+rustpi replay --failures-only
+
+# Audit-only mode — hides token content; shows only structural events
+rustpi replay --audit-only
+
+# Machine-readable JSON array of TimelineEntry objects
+rustpi replay --output json
+```
+
+### TimelineEntry fields (JSON mode)
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `timestamp` | ISO 8601 string | When the event occurred |
+| `run_id` | string | Run this event belongs to |
+| `kind` | string | Event type tag (e.g. `RunStarted`, `ToolFailed`) |
+| `detail` | string | Human-readable summary of the event |
+| `is_failure` | bool | `true` for `RunFailed` / `ToolExecutionFailed` events |
+
+### What `diag` now shows
+
+`rustpi diag` now includes an **Event Log** section that reports:
+- Recent failures — runs that ended with a `RunFailed` event, with reason strings
+- Incomplete runs — runs that have a `RunStarted` with no terminal event (`RunCompleted` / `RunFailed` / `RunCancelled`)
+
+### Fault-tolerant log loading
+
+`EventLogReader::from_file_tolerant()` skips corrupt or unreadable lines rather than failing the entire load. Each skipped line is counted and surfaced in the reader's diagnostics, so you can replay partial logs after a crash.
+
+---
+
+## Crash Recovery
+
+`crates/session-store` now includes a startup crash recovery subsystem that reconciles in-progress or pending runs left over from an unclean shutdown.
+
+### `run_startup_recovery()`
+
+Call this once at process startup, before accepting new work:
+
+```rust
+use session_store::recovery::run_startup_recovery;
+
+run_startup_recovery(&store, &SafeResumePolicy::default()).await?;
+```
+
+It scans all runs in `Running` or `Pending` state, applies `SafeResumePolicy`, and updates their status accordingly.
+
+### `SafeResumePolicy` behaviour
+
+| Condition | Action | `ReconciledStatus` |
+|-----------|--------|--------------------|
+| No tool activity (conversational run) | Auto-resume | `Resumable` |
+| Tool side-effects detected | Halt; operator must decide | `RequiresApproval` |
+| Run started > 24 hours ago | Cancel automatically | `Cancelled` |
+| Run already in a terminal state | Skip silently | `AlreadyTerminal` |
+| Run explicitly cancelled before crash | Preserve as cancelled | `Cancelled` |
+
+### `ReconciledStatus` variants
+
+| Variant | Meaning |
+|---------|---------|
+| `Resumable` | Safe to restart the run automatically |
+| `RequiresApproval` | Run had tool side-effects; operator must approve before resume |
+| `Cancelled` | Run was cancelled (old age policy or prior cancellation) |
+| `Failed` | Run ended in failure before the crash |
+| `AlreadyTerminal` | Run was already completed/failed/cancelled; no action needed |
+
+### `RecoveryScanner`
+
+`RecoveryScanner` is the lower-level API. It returns a `Vec<ReconcileOutcome>` for all scanned runs so callers can inspect or log each decision:
+
+```rust
+let scanner = RecoveryScanner::new(&store, policy);
+let outcomes = scanner.scan().await?;
+for outcome in &outcomes {
+    println!("{}: {:?}", outcome.run_id, outcome.status);
+}
+```
+
+### `RecoveryRunRecord`
+
+A lightweight projection of a run used during scanning — contains `run_id`, `session_id`, `status`, `started_at`, and a `has_tool_activity` flag derived from the event log.
+
+---
+
+
 
 | Phase | Title | Status |
 |---|---|---|
@@ -1042,7 +1230,7 @@ While a run is active (`[Run: active]` in the status bar), press `Ctrl+I` to req
 | 9 | RPC API | ✅ Complete |
 | 10 | CLI | ✅ Complete |
 | 11 | Ratatui TUI | ✅ Complete |
-| 12 | Observability, replay, and reliability hardening | 🔲 Planned |
+| 12 | Observability, replay, and reliability hardening | ✅ Complete |
 | 13 | Security hardening | 🔲 Planned |
 | 14 | Full-system testing and parity validation | 🔲 Planned |
 
@@ -1060,12 +1248,13 @@ rustpi/
 │   ├── cli/              # rustpi binary
 │   ├── config-core/      # Layered config system
 │   ├── context-engine/   # Context window assembly
-│   ├── event-log/        # Append-only JSONL event log
+│   ├── event-log/        # Append-only JSONL event log + replay
 │   ├── memory-sync/      # Obsidian vault + vector memory
 │   ├── model-adapters/   # Provider abstraction and registry
+│   ├── observability/    # TelemetryCollector, metrics, TelemetrySummary
 │   ├── policy-engine/    # Allow/deny/approval rules
 │   ├── rpc-api/          # JSONL RPC protocol
-│   ├── session-store/    # Session persistence
+│   ├── session-store/    # Session persistence + crash recovery
 │   ├── tool-runtime/     # Tool execution engine
 │   └── tui/              # rustpi-tui binary
 ├── docs/
@@ -1124,6 +1313,18 @@ cargo test -p model-adapters
 # Specific adapter tests
 cargo test -p model-adapters adapters::openai
 cargo test -p model-adapters adapters::copilot
+
+# Observability tests (11 tests)
+cargo test -p observability
+
+# Event-log replay tests (33 tests total)
+cargo test -p event-log
+
+# CLI replay + diag tests (27 tests total)
+cargo test -p cli
+
+# Session-store recovery tests (10 tests)
+cargo test -p session-store
 ```
 
 Note: Provider integration tests use `wiremock` mock servers and do not require live API credentials.

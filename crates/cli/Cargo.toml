@@ -19,6 +19,8 @@ path = "tests/cli_tests.rs"
 [dependencies]
 agent-core = { path = "../agent-core" }
 config-core = { path = "../config-core" }
+event-log = { path = "../event-log" }
+chrono = { workspace = true }
 rpc-api = { path = "../rpc-api" }
 serde = { workspace = true }
 serde_json = { workspace = true }

@@ -267,3 +267,42 @@ fn test_output_json_error() {
     // print_err always writes "error: <msg>" to stderr regardless of mode.
     // (Verified at the process level by test_run_with_file_flag / similar.)
 }
+
+// ===========================================================================
+// Phase 12: replay command tests
+// ===========================================================================
+
+#[test]
+fn test_replay_command_exits_zero() {
+    let out = rustpi().arg("replay").output().unwrap();
+    assert!(out.status.success(), "exit: {:?}, stderr: {}", out.status.code(), String::from_utf8_lossy(&out.stderr));
+}
+
+#[test]
+fn test_replay_audit_flag() {
+    let out = rustpi().args(["replay", "--audit-only"]).output().unwrap();
+    assert!(out.status.success(), "exit: {:?}, stderr: {}", out.status.code(), String::from_utf8_lossy(&out.stderr));
+}
+
+#[test]
+fn test_replay_failures_flag() {
+    let out = rustpi().args(["replay", "--failures-only"]).output().unwrap();
+    assert!(out.status.success(), "exit: {:?}, stderr: {}", out.status.code(), String::from_utf8_lossy(&out.stderr));
+}
+
+#[test]
+fn test_replay_json_output() {
+    let out = rustpi().args(["--output", "json", "replay"]).output().unwrap();
+    assert!(out.status.success(), "exit: {:?}, stderr: {}", out.status.code(), String::from_utf8_lossy(&out.stderr));
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    // JSON mode wraps output in {"ok":true,"data":...}
+    assert!(stdout.contains("\"ok\""), "expected JSON envelope in: {stdout}");
+}
+
+#[test]
+fn test_replay_help() {
+    let out = rustpi().args(["replay", "--help"]).output().unwrap();
+    assert!(out.status.success(), "exit: {:?}", out.status.code());
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(stdout.contains("replay"), "expected 'replay' in help: {stdout}");
+}

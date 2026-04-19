@@ -19,5 +19,5 @@ pub use error::EventLogError;
 pub use file_store::FileEventStore;
 pub use memory_store::MemoryEventStore;
 pub use record::{AuditKind, AuditRecord, EventRecord};
-pub use replay::ReplayReader;
+pub use replay::{IncompleteRunRecord, IncompleteRunState, ReplayReader, TimelineEntry};
 pub use store::{decode_event, decode_record, encode_event, encode_record, EventStore};
