@@ -7,8 +7,20 @@
 //! - Client writes one [`RpcRequest`] per line to stdin
 //! - Server writes [`RpcResponse`] or streaming [`RpcEvent`]s to stdout
 //! - Each line is a complete JSON object (JSONL)
-//!
-//! Phase 0 stub — framing and dispatch deferred to Phase 9.
 
+pub mod dispatch;
 pub mod error;
+pub mod normalize;
 pub mod protocol;
+pub mod server;
+pub mod transport;
+
+pub use error::RpcError;
+pub use protocol::*;
+pub use server::RpcServer;
+pub use transport::{LineReader, LineWriter};
+
+/// Build an `RpcServer` reading from stdin and writing to stdout.
+pub fn stdio_server() -> RpcServer<tokio::io::Stdin, tokio::io::Stdout> {
+    RpcServer::new(tokio::io::stdin(), tokio::io::stdout())
+}

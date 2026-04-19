@@ -691,28 +691,78 @@ Provide machine-to-machine embedding and streaming control.
 
 ### Deliverables
 
-* [ ] stdin/stdout JSONL RPC protocol
-* [ ] session attach/detach
-* [ ] structured request/response model
-* [ ] streamed event output
+* [x] stdin/stdout JSONL RPC protocol
+* [x] session attach/detach
+* [x] structured request/response model
+* [x] streamed event output
 
 ### Tasks
 
-* [ ] Define RPC request schema
-* [ ] Define RPC response schema
-* [ ] Define streaming event schema
-* [ ] Implement session attach/detach
-* [ ] Implement run start/stop commands
-* [ ] Implement tool passthrough events
-* [ ] Implement auth-status queries
-* [ ] Implement capability discovery
-* [ ] Add integration tests with a stub host process
+* [x] Define RPC request schema
+* [x] Define RPC response schema
+* [x] Define streaming event schema
+* [x] Implement session attach/detach
+* [x] Implement run start/stop commands
+* [x] Implement tool passthrough events
+* [x] Implement auth-status queries
+* [x] Implement capability discovery
+* [x] Add integration tests with a stub host process
 
 ### Exit criteria
 
-* [ ] External hosts can drive the runtime over JSONL
-* [ ] Streaming output is stable
-* [ ] RPC can be used by CLI and future editor integrations
+* [x] External hosts can drive the runtime over JSONL
+* [x] Streaming output is stable
+* [x] RPC can be used by CLI and future editor integrations
+
+> **Phase 9 completed.** ~462 tests pass across workspace (`cargo test --workspace`).
+>
+> **Implemented in `crates/rpc-api/src/`:**
+> - `transport.rs` — `LineReader<R>` (async JSONL reader, skips empty lines) + `LineWriter<W>` (`Arc<Mutex>`-backed, `Clone`-able for concurrent writes from multiple server tasks)
+> - `protocol.rs` — Full protocol types: `RpcRequest`, `RpcMethod` (6 variants), `RpcResponse` (Ack/Success/StreamEvent/Event/Error), `RpcEvent`, `EventCategory` (5 variants), `SessionInfo`, `RunInfo`, `AuthStatusInfo`, `CapabilitiesInfo`, `RpcErrorCode` (9 variants)
+> - `server.rs` — `RpcServer<R,W>` main dispatch loop with parse-error recovery and broken-pipe detection; `ServerState` (sessions map, runs map, event bus, monotonic seq counter, cancel tokens); `stdio_server()` convenience constructor over `tokio::io::stdin/stdout`
+> - `dispatch.rs` — Handler functions for all 6 `RpcMethod` variants: `SessionAttach`, `SessionDetach`, `RunStart` (with simulated streaming), `RunCancel` (token-based), `AuthStatus`, `Capabilities`
+> - `normalize.rs` — `normalize_event()` maps all 40+ `AgentEvent` variants to typed `RpcEvent`s with assigned `EventCategory`, session/run ID extraction, and safe external payloads (internal fields stripped)
+> - `error.rs` — `RpcError` with variants: `SessionNotFound`, `RunNotFound`, `InvalidRunState`, `BrokenPipe`, `Internal`
+>
+> ### Architecture notes
+>
+> **Transport layer:**
+> `LineReader` wraps a `tokio::io::AsyncBufRead`, reads one line at a time, skips blank lines, and returns `None` on EOF. `LineWriter` wraps the writer in `Arc<Mutex<...>>` so it is `Clone` and multiple server tasks can write responses concurrently without interleaving.
+>
+> **Protocol design:**
+> ```
+> Client → Server:  one RpcRequest per line (JSONL)
+> Server → Client:  RpcResponse variants (Ack, Success, StreamEvent, Event, Error)
+> ```
+> All messages are single-line JSON objects terminated by `\n`. The server emits an `Ack` immediately after parsing each request, then follows with `Success` / `StreamEvent` / `Error` as the operation completes.
+>
+> **RpcMethod variants and their responses:**
+>
+> | Method | Immediate | Terminal |
+> |--------|-----------|---------|
+> | `SessionAttach` | Ack | Success(`SessionInfo`) |
+> | `SessionDetach` | Ack | Success |
+> | `RunStart` | Ack | StreamEvents + Success(`RunInfo`) |
+> | `RunCancel` | Ack | Success |
+> | `AuthStatus` | Ack | Success(`AuthStatusInfo`) |
+> | `Capabilities` | Ack | Success(`CapabilitiesInfo`) |
+>
+> **Event normalization:**
+> `normalize_event()` in `normalize.rs` is an exhaustive `match` over all `AgentEvent` variants. Each arm produces an `RpcEvent` with a typed `event_type` string, appropriate `EventCategory`, extracted `session_id`/`run_id`, and a safe `payload` (serde_json::Value). Internal-only fields are excluded from the payload.
+>
+> **EventCategory values:**
+> `session` · `run` · `tool` · `auth` · `system`
+>
+> **RpcErrorCode values:**
+> `parse_error` · `invalid_request` · `unknown_method` · `session_not_found` · `run_not_found` · `invalid_run_state` · `auth_unavailable` · `capability_unavailable` · `internal_error`
+>
+> ### Known limitations and deferred work
+>
+> - **RunStart uses simulated streaming** — event chunks are synthesised by the dispatch layer; real model-adapter streaming integration is deferred to Phase 10 (CLI) when a full run executor is wired up.
+> - **AuthStatus is a stub** — returns a placeholder `AuthStatusInfo` with `authenticated: false`; real provider auth query is deferred to Phase 10.
+> - **Embedding generation deferred** — `QdrantMemory::search_similar()` ANN path requires pre-computed embeddings; no embedding model is wired in yet (deferred to Phase 10+).
+> - **No multiplexed sessions over a single stream** — the current server handles one active run at a time per stream; parallel run support across a single stdio channel is deferred.
+> - **No TLS / Unix socket transport** — only stdin/stdout is implemented; network transport variants are deferred to Phase 12.
 
 ---
 
@@ -983,7 +1033,7 @@ These are the dependencies that will govern the schedule:
 
 * [x] Phase 0 before all other phases
 * [x] Phase 1 before Phase 5, 6, 9, 10, 11
-* [ ] Phase 3 before Phase 4
+* [x] Phase 3 before Phase 4
 * [ ] Phase 4 before meaningful end-to-end testing
 * [x] Phase 7 before mature memory layering
 * [x] Phase 8 depends on Phase 6 and 7

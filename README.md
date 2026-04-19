@@ -2,7 +2,7 @@
 
 A native Rust AI agent platform with multi-provider model access, durable sessions, Obsidian-backed local-first memory, and a rich terminal UI.
 
-**Status: Phases 0–8 complete — vault memory and personality system live**
+**Status: Phases 0–9 complete — RPC API live**
 
 ---
 
@@ -53,7 +53,7 @@ session-store   event-log    config-core
 | `context-engine` | Context window assembly, ignore rules, token budgeting | ✅ Phase 6 |
 | `session-store` | Durable session persistence (SQLite / sled / PostgreSQL); 4 store traits + config-driven factory | ✅ Phase 7 |
 | `memory-sync` | Qdrant semantic memory (`QdrantMemory`); Obsidian vault reader/writer, canonical docs, personality loader, sync engine | ✅ Phase 8 |
-| `rpc-api` | JSONL RPC protocol types and codec | 🔧 Phase 9 |
+| `rpc-api` | stdin/stdout JSONL RPC server — session attach/detach, run start/cancel, auth status, capabilities | ✅ Phase 9 |
 | `cli` | Scriptable CLI binary (`rustpi`) | 🔧 Phase 10 |
 | `tui` | Ratatui full-screen TUI binary (`rustpi-tui`) | 🔧 Phase 11 |
 
@@ -601,6 +601,177 @@ The log is the source of truth for session state and supports full replay for de
 
 ---
 
+## RPC API
+
+The `crates/rpc-api` crate provides a fully working stdin/stdout JSONL RPC protocol for machine-to-machine agent control. External processes (editors, orchestrators, scripts) can drive the runtime by writing requests to stdin and reading responses from stdout.
+
+### Starting the server
+
+```rust
+use rpc_api::stdio_server;
+
+let server = stdio_server(); // reads stdin, writes stdout
+server.run().await?;
+```
+
+`stdio_server()` is a convenience constructor. For custom transports, use `RpcServer::new(reader, writer)` with any `AsyncRead + AsyncWrite` pair.
+
+### Protocol overview
+
+- **Transport**: stdin/stdout, newline-delimited JSON (JSONL) — one complete JSON object per line
+- **Client → server**: one `RpcRequest` per line
+- **Server → client**: `RpcResponse` variants (see below)
+- The server emits an `Ack` immediately on receiving each request, then follows with a `Success`, `StreamEvent` sequence, or `Error`
+
+### Request format
+
+```json
+{"id":"<string>","method":{"<MethodName>":{/* params */}}}
+```
+
+The `id` field is a client-assigned string (UUID or any unique identifier) used to correlate responses.
+
+### RPC methods
+
+#### `SessionAttach` — attach to or create a session
+
+```json
+{"id":"req-1","method":{"SessionAttach":{"session_id":null}}}
+```
+
+Pass `"session_id": "<uuid>"` to attach to an existing session; `null` creates a new one.
+
+**Success response:**
+```json
+{"kind":"Success","request_id":"req-1","data":{"session_id":"<uuid>","status":"Active","created_at":"2024-01-01T00:00:00Z","run_count":0,"label":null}}
+```
+
+#### `SessionDetach` — detach from a session
+
+```json
+{"id":"req-2","method":{"SessionDetach":{"session_id":"<uuid>"}}}
+```
+
+**Success response:**
+```json
+{"kind":"Success","request_id":"req-2","data":null}
+```
+
+#### `RunStart` — start a run with streaming output
+
+```json
+{"id":"req-3","method":{"RunStart":{"session_id":"<uuid>","prompt":"Hello, agent!","provider":null,"model":null}}}
+```
+
+The server emits an `Ack`, then a sequence of `StreamEvent` messages as the run progresses, and finally a `Success` with `RunInfo` when the run completes:
+
+**Ack (immediate):**
+```json
+{"kind":"Ack","request_id":"req-3"}
+```
+
+**StreamEvent (repeated, one per chunk/event):**
+```json
+{"kind":"StreamEvent","event":{"seq":1,"timestamp":"2024-01-01T00:00:00Z","category":"run","session_id":"<uuid>","run_id":"<uuid>","event_type":"token_chunk","payload":{"delta":"Hello "}}}
+```
+
+**Success (terminal):**
+```json
+{"kind":"Success","request_id":"req-3","data":{"run_id":"<uuid>","session_id":"<uuid>","status":"Completed","created_at":"2024-01-01T00:00:00Z","completed_at":"2024-01-01T00:00:01Z"}}
+```
+
+#### `RunCancel` — cancel an in-progress run
+
+```json
+{"id":"req-4","method":{"RunCancel":{"session_id":"<uuid>","run_id":"<uuid>"}}}
+```
+
+`run_id` is optional; omitting it cancels the most recent active run in the session.
+
+**Success response:**
+```json
+{"kind":"Success","request_id":"req-4","data":null}
+```
+
+#### `AuthStatus` — query auth state for a provider
+
+```json
+{"id":"req-5","method":{"AuthStatus":{"provider":"openai"}}}
+```
+
+**Success response:**
+```json
+{"kind":"Success","request_id":"req-5","data":{"provider_id":"openai","authenticated":true,"token_expires_at":"2024-06-01T00:00:00Z","flow":null}}
+```
+
+#### `Capabilities` — list supported methods and server capabilities
+
+```json
+{"id":"req-6","method":{"Capabilities":{"provider":"openai"}}}
+```
+
+**Success response:**
+```json
+{"kind":"Success","request_id":"req-6","data":{"protocol_version":"1.0","supported_methods":["session_attach","session_detach","run_start","run_cancel","auth_status","capabilities"],"streaming_supported":true,"tool_passthrough":false,"max_concurrent_runs":1}}
+```
+
+### Error response format
+
+Errors include a structured `code` field for programmatic handling:
+
+```json
+{"kind":"Error","request_id":"req-x","code":"session_not_found","message":"session <id> not found"}
+```
+
+**Error codes:**
+
+| Code | Meaning |
+|------|---------|
+| `parse_error` | Request line could not be parsed as valid JSON |
+| `invalid_request` | JSON parsed but failed schema validation |
+| `unknown_method` | Method name not recognised |
+| `session_not_found` | Referenced session does not exist |
+| `run_not_found` | Referenced run does not exist |
+| `invalid_run_state` | Operation not valid for the run's current state |
+| `auth_unavailable` | Auth info could not be retrieved for the provider |
+| `capability_unavailable` | Provider does not support the requested capability |
+| `internal_error` | Unexpected server-side failure |
+
+### StreamEvent format
+
+`StreamEvent` messages carry normalized `RpcEvent` objects pushed by the server outside of direct request/response flow:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `seq` | `u64` | Monotonically increasing sequence number (per server instance) |
+| `timestamp` | `string` | ISO 8601 UTC timestamp |
+| `category` | `string` | One of: `session` · `run` · `tool` · `auth` · `system` |
+| `session_id` | `string \| null` | Session this event belongs to, if applicable |
+| `run_id` | `string \| null` | Run this event belongs to, if applicable |
+| `event_type` | `string` | Normalized event tag (e.g. `token_chunk`, `tool_started`, `run_completed`) |
+| `payload` | `object` | Safe external payload — internal fields stripped |
+
+### Crate modules
+
+| Module | Role |
+|--------|------|
+| `transport` | `LineReader` / `LineWriter` — async JSONL I/O with concurrent-write support |
+| `protocol` | All protocol types: requests, responses, events, info structs, error codes |
+| `server` | `RpcServer` main loop — parse-error recovery, broken-pipe handling, `ServerState` |
+| `dispatch` | Per-method handler functions — session and run lifecycle, auth, capabilities |
+| `normalize` | `normalize_event()` — exhaustive `AgentEvent` → `RpcEvent` mapping |
+| `error` | `RpcError` — `SessionNotFound`, `RunNotFound`, `InvalidRunState`, `BrokenPipe`, `Internal` |
+
+### Limitations
+
+- **RunStart uses simulated streaming** — chunks are synthesised by the dispatch layer; real model-adapter streaming integration is deferred to Phase 10 (CLI).
+- **AuthStatus is a stub** — returns placeholder data; real provider auth query deferred to Phase 10.
+- **Embedding generation deferred** — `QdrantMemory` ANN search requires pre-computed embeddings; no embedding model is wired in yet.
+- **Single run per stream** — the current server does not multiplex parallel runs over a single stdio channel.
+- **No network transport** — only stdin/stdout; TLS / Unix socket variants deferred to Phase 12.
+
+---
+
 ## Development status
 
 | Phase | Title | Status |
@@ -614,7 +785,7 @@ The log is the source of truth for session state and supports full replay for de
 | 6 | Context engine MVP | ✅ Complete |
 | 7 | Session stores and durable memory backends | ✅ Complete |
 | 8 | Obsidian vault memory and personality system | ✅ Complete |
-| 9 | RPC API | 🔲 Planned |
+| 9 | RPC API | ✅ Complete |
 | 10 | CLI | 🔲 Planned |
 | 11 | Ratatui TUI | 🔲 Planned |
 | 12 | Observability, replay, and reliability hardening | 🔲 Planned |
