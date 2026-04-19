@@ -3831,6 +3831,7 @@ dependencies = [
  "agent-core",
  "anyhow",
  "chrono",
+ "cli",
  "config-core",
  "crossterm",
  "futures",

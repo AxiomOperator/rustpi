@@ -1,4 +1,4 @@
-# `rustpi run` — Command Examples
+# rustpi — Command Examples
 
 ## Basic usage
 
@@ -69,3 +69,33 @@ rustpi run --non-interactive
 # Use an alternate config file
 rustpi run --config ~/my-config.toml "hello"
 ```
+
+---
+
+## TUI (Terminal User Interface)
+
+```bash
+# Launch the interactive full-screen TUI
+rustpi-tui
+
+# Launch with a custom config
+RUSTPI_CONFIG=~/my-config.toml rustpi-tui
+
+# Build and run the TUI directly via cargo
+cargo run --bin rustpi-tui
+```
+
+### TUI keybindings
+
+| Key | Action |
+|-----|--------|
+| `Enter` | Submit input / send message |
+| `q` / `Ctrl+C` | Quit |
+| `1`–`6` | Switch pane (Conversation, Tools, Context, Sessions, Auth, Logs) |
+| `↑` / `k` | Scroll up |
+| `↓` / `j` | Scroll down |
+| `PgUp` / `PgDn` | Page up / page down |
+| `Ctrl+I` | Interrupt current request |
+| `y` / `n` | Approve / deny tool action |
+| `Backspace` | Delete character |
+| `?` | Help |
