@@ -79,6 +79,15 @@ pub enum Command {
         #[arg(long)]
         failures_only: bool,
     },
+
+    /// Show what context would be built for the current project.
+    Context {
+        /// Optional query to focus relevance scoring.
+        query: Option<String>,
+    },
+
+    /// Show current observability metrics (provider stats, token usage, tool failures).
+    Metrics,
 }
 
 /// Arguments for `rustpi run`.

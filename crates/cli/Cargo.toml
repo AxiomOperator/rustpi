@@ -18,14 +18,20 @@ path = "tests/cli_tests.rs"
 
 [dependencies]
 agent-core = { path = "../agent-core" }
+observability = { path = "../observability" }
+auth-core = { path = "../auth-core" }
 config-core = { path = "../config-core" }
+context-engine = { path = "../context-engine" }
 event-log = { path = "../event-log" }
+session-store = { path = "../session-store" }
+model-adapters = { path = "../model-adapters" }
 chrono = { workspace = true }
 rpc-api = { path = "../rpc-api" }
 serde = { workspace = true }
 serde_json = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true }
+tokio-util = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
 anyhow = { workspace = true }

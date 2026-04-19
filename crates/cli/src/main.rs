@@ -43,8 +43,13 @@ async fn run() -> i32 {
     // Build output helper.
     let output = Output::new(parsed_args.output.clone(), config.cli.color);
 
-    // Build executor (creates a fresh in-process ServerState).
-    let executor = Executor::new();
+    // Build executor (creates a fresh in-process ServerState with provider registry).
+    let executor = Executor::new_with_config_and_persistence(&config).await;
+
+    // Subscribe telemetry collector to the event bus — runs in background for the
+    // lifetime of the process.
+    let telemetry = observability::TelemetryCollector::new();
+    let _telemetry_handle = telemetry.subscribe_to_bus(&executor.state.event_bus);
 
     // Resolve global overrides.
     let provider: Option<ProviderId> = parsed_args
@@ -118,6 +123,16 @@ async fn run() -> i32 {
                 &output,
             )
             .await
+        }
+
+        Some(Command::Context { query }) => {
+            cli::commands::context::show_context(query).await.map_err(|e| {
+                cli::error::CliError::Other(e.to_string())
+            })
+        }
+
+        Some(Command::Metrics) => {
+            cli::commands::metrics::metrics_command(&telemetry, &output).await
         }
     };
 
