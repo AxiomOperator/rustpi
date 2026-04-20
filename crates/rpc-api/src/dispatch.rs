@@ -519,6 +519,8 @@ where
                         success: false,
                         output: json!({ "error": "run cancelled" }),
                     }
+                } else if tool_call.name == "memory_note" {
+                    execute_memory_note(&tool_call).await
                 } else {
                     match tool_runner
                         .execute(
@@ -855,6 +857,95 @@ async fn emit_run_failed<W>(
     let _ = writer.write(&RpcResponse::StreamEvent { event: rpc_event }).await;
 }
 
+/// Execute the virtual `memory_note` tool: write a note to the vault's memory/ folder.
+async fn execute_memory_note(call: &agent_core::types::ToolCall) -> agent_core::types::ToolResult {
+    let call_id = call.id.clone();
+    let args = &call.arguments;
+
+    let title = match args.get("title").and_then(|v| v.as_str()) {
+        Some(t) => t.to_string(),
+        None => return agent_core::types::ToolResult {
+            call_id,
+            success: false,
+            output: json!({ "error": "missing required argument: title" }),
+        },
+    };
+    let content = match args.get("content").and_then(|v| v.as_str()) {
+        Some(c) => c.to_string(),
+        None => return agent_core::types::ToolResult {
+            call_id,
+            success: false,
+            output: json!({ "error": "missing required argument: content" }),
+        },
+    };
+    let append = args.get("append").and_then(|v| v.as_bool()).unwrap_or(false);
+
+    // Sanitise title: strip leading slashes, ban path traversal
+    let safe_title = title.replace(['/', '\\', '\0'], "_");
+    if safe_title.contains("..") {
+        return agent_core::types::ToolResult {
+            call_id,
+            success: false,
+            output: json!({ "error": "title must not contain path traversal" }),
+        };
+    }
+
+    let config = match config_core::ConfigLoader::new().load() {
+        Ok(c) => c,
+        Err(e) => return agent_core::types::ToolResult {
+            call_id,
+            success: false,
+            output: json!({ "error": format!("could not load config: {e}") }),
+        },
+    };
+    let vault_path = match config.memory.obsidian_vault_path.as_ref() {
+        Some(p) => p.clone(),
+        None => return agent_core::types::ToolResult {
+            call_id,
+            success: false,
+            output: json!({ "error": "no obsidian_vault_path configured" }),
+        },
+    };
+
+    let memory_dir = vault_path.join("memory");
+    if !memory_dir.exists() {
+        if let Err(e) = std::fs::create_dir_all(&memory_dir) {
+            return agent_core::types::ToolResult {
+                call_id,
+                success: false,
+                output: json!({ "error": format!("could not create memory dir: {e}") }),
+            };
+        }
+    }
+
+    let file_path = memory_dir.join(format!("{safe_title}.md"));
+    let result = if append && file_path.exists() {
+        let mut existing = std::fs::read_to_string(&file_path).unwrap_or_default();
+        existing.push('\n');
+        existing.push_str(&content);
+        std::fs::write(&file_path, &existing)
+    } else {
+        std::fs::write(&file_path, &content)
+    };
+
+    match result {
+        Ok(_) => agent_core::types::ToolResult {
+            call_id,
+            success: true,
+            output: json!({
+                "saved": file_path.display().to_string(),
+                "title": safe_title,
+                "bytes": content.len(),
+            }),
+        },
+        Err(e) => agent_core::types::ToolResult {
+            call_id,
+            success: false,
+            output: json!({ "error": format!("write failed: {e}") }),
+        },
+    }
+}
+
 /// Build the primary system message from the Obsidian vault personality.
 /// Returns an empty string if no vault is configured or loading fails.
 async fn build_system_message(run_id: &RunId, event_bus: &agent_core::bus::EventBus) -> String {
@@ -1065,6 +1156,22 @@ fn build_tool_schemas() -> Vec<serde_json::Value> {
                         "new_str": { "type": "string", "description": "Replacement text" }
                     },
                     "required": ["path", "old_str", "new_str"]
+                }
+            }
+        }),
+        json!({
+            "type": "function",
+            "function": {
+                "name": "memory_note",
+                "description": "Save a note to the user's memory vault (Obsidian). Use this to remember information the user asks you to store, such as credentials, preferences, facts, or any other persistent data. Notes are saved to the memory/ folder of the vault.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "title": { "type": "string", "description": "Filename for the note (without .md extension). Use a descriptive name like 'ssh-key-workstation' or 'api-keys'." },
+                        "content": { "type": "string", "description": "Markdown content of the note to save." },
+                        "append": { "type": "boolean", "description": "If true and the note already exists, append content instead of replacing it. Default: false." }
+                    },
+                    "required": ["title", "content"]
                 }
             }
         }),

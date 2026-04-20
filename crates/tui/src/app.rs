@@ -4,7 +4,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use anyhow::Result;
-use crossterm::event::{Event, EventStream, KeyEventKind};
+use crossterm::event::{DisableBracketedPaste, EnableBracketedPaste, Event, EventStream, KeyEventKind};
 use crossterm::execute;
 use crossterm::terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen};
 use futures::StreamExt;
@@ -73,14 +73,14 @@ impl App {
 
         enable_raw_mode()?;
         let mut stdout = std::io::stdout();
-        execute!(stdout, EnterAlternateScreen)?;
+        execute!(stdout, EnterAlternateScreen, EnableBracketedPaste)?;
         let backend = CrosstermBackend::new(stdout);
         let mut terminal = Terminal::new(backend)?;
 
         let result = self.event_loop(&mut terminal).await;
 
         disable_raw_mode()?;
-        execute!(terminal.backend_mut(), LeaveAlternateScreen)?;
+        execute!(terminal.backend_mut(), LeaveAlternateScreen, DisableBracketedPaste)?;
         terminal.show_cursor()?;
 
         result
@@ -131,6 +131,14 @@ impl App {
                                     if self.handle_action(action) {
                                         break;
                                     }
+                                }
+                            }
+                        }
+                        Some(Ok(Event::Paste(text))) => {
+                            // Bracketed paste: insert entire pasted string at once (no per-char redraws)
+                            for c in text.chars() {
+                                if c != '\r' && c != '\n' {
+                                    self.input_buffer.push(c);
                                 }
                             }
                         }

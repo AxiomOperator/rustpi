@@ -277,9 +277,9 @@ pub fn all_themes() -> Vec<Theme> {
 /// Resolve a theme by name (case-insensitive). Falls back to Matrix.
 pub fn by_name(name: &str) -> Theme {
     match name.to_lowercase().as_str() {
-        "classic" | "default" => classic(),
-        "dracula"             => dracula(),
-        "nord"                => nord(),
-        _                     => matrix(), // "matrix" or unknown → Matrix
+        "classic"           => classic(),
+        "dracula"           => dracula(),
+        "nord"              => nord(),
+        _                   => matrix(), // "matrix", "default", or unknown → Matrix
     }
 }
