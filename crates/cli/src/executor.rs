@@ -64,7 +64,7 @@ impl Executor {
         let _ = tokio::fs::create_dir_all(&rustpi_dir).await;
 
         // Build Qdrant memory retriever if enabled in config.
-        let memory_retriever: Arc<dyn context_engine::memory::MemoryRetriever> = {
+        let qdrant_retriever: Arc<dyn context_engine::memory::MemoryRetriever> = {
             let mc = &config.memory;
             if mc.qdrant_enabled {
                 match mc.qdrant_url.as_deref() {
@@ -94,6 +94,25 @@ impl Executor {
                 Arc::new(context_engine::memory::NoopMemory)
             }
         };
+
+        // Build vault memory retriever from the memory/ subfolder if vault is configured.
+        let vault_retriever: Arc<dyn context_engine::memory::MemoryRetriever> = {
+            let mc = &config.memory;
+            if let Some(vault_path) = mc.obsidian_vault_path.as_ref() {
+                let memory_dir = vault_path.join("memory");
+                if memory_dir.is_dir() {
+                    tracing::info!("Obsidian vault memory enabled ({})", memory_dir.display());
+                    Arc::new(context_engine::memory::VaultMemory::new(&memory_dir))
+                } else {
+                    Arc::new(context_engine::memory::NoopMemory)
+                }
+            } else {
+                Arc::new(context_engine::memory::NoopMemory)
+            }
+        };
+
+        let memory_retriever: Arc<dyn context_engine::memory::MemoryRetriever> =
+            Arc::new(context_engine::memory::CombinedMemory::new(vec![qdrant_retriever, vault_retriever]));
 
         match (
             build_session_store(&config.memory).await,

@@ -79,6 +79,41 @@ impl QdrantMemory {
         Ok(())
     }
 
+    /// Store plain text as a memory entry using a zero-vector (Phase 7: no embeddings).
+    /// Ensures the collection exists first. Keyword scroll will still match this content.
+    pub async fn store_text(
+        &self,
+        content: &str,
+        tags: Vec<String>,
+        source: Option<String>,
+    ) -> Result<(), MemorySyncError> {
+        self.ensure_collection().await?;
+        let record = MemoryRecord::new(content, tags, None);
+        // Zero vector placeholder — real embeddings to be added in Phase 8.
+        let mut embedding = vec![0.0f32; self.vector_size as usize];
+        // Small hash to make the vector non-zero so cosine similarity doesn't NaN.
+        let hash_seed = content.bytes().fold(0u32, |acc, b| acc.wrapping_add(b as u32));
+        if !embedding.is_empty() {
+            embedding[0] = (hash_seed % 1000) as f32 / 1000.0;
+        }
+        let mut payload = Payload::new();
+        payload.insert("content", record.content.clone());
+        payload.insert(
+            "tags",
+            serde_json::to_string(&record.tags).unwrap_or_else(|_| "[]".to_string()),
+        );
+        if let Some(src) = source {
+            payload.insert("source", src);
+        }
+        payload.insert("created_at", record.created_at.to_rfc3339());
+        let point = qdrant_client::qdrant::PointStruct::new(record.id.to_string(), embedding, payload);
+        self.client
+            .upsert_points(UpsertPointsBuilder::new(&self.collection, vec![point]).wait(true))
+            .await
+            .map_err(|e| MemorySyncError::Qdrant(e.to_string()))?;
+        Ok(())
+    }
+
     /// Upsert a memory record with its embedding into Qdrant.
     pub async fn upsert_memory(
         &self,

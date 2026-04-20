@@ -880,7 +880,7 @@ async fn execute_memory_note(call: &agent_core::types::ToolCall) -> agent_core::
     };
     let append = args.get("append").and_then(|v| v.as_bool()).unwrap_or(false);
 
-    // Sanitise title: strip leading slashes, ban path traversal
+    // Sanitise title
     let safe_title = title.replace(['/', '\\', '\0'], "_");
     if safe_title.contains("..") {
         return agent_core::types::ToolResult {
@@ -918,31 +918,213 @@ async fn execute_memory_note(call: &agent_core::types::ToolCall) -> agent_core::
         }
     }
 
+    // Apply Obsidian wiki links [[note title]] to the content
+    let linked_content = apply_wiki_links(&content, &vault_path, &safe_title);
+
     let file_path = memory_dir.join(format!("{safe_title}.md"));
-    let result = if append && file_path.exists() {
+    let final_content = if append && file_path.exists() {
         let mut existing = std::fs::read_to_string(&file_path).unwrap_or_default();
         existing.push('\n');
-        existing.push_str(&content);
-        std::fs::write(&file_path, &existing)
+        existing.push_str(&linked_content);
+        existing
     } else {
-        std::fs::write(&file_path, &content)
+        linked_content.clone()
     };
 
-    match result {
-        Ok(_) => agent_core::types::ToolResult {
-            call_id,
-            success: true,
-            output: json!({
-                "saved": file_path.display().to_string(),
-                "title": safe_title,
-                "bytes": content.len(),
-            }),
-        },
+    match std::fs::write(&file_path, &final_content) {
+        Ok(_) => {
+            // Fire-and-forget: also index in Qdrant for keyword search
+            let mc = config.memory.clone();
+            let content_clone = final_content.clone();
+            let title_clone = safe_title.clone();
+            tokio::spawn(async move {
+                if mc.qdrant_enabled {
+                    if let Some(url) = mc.qdrant_url.as_deref() {
+                        if let Ok(qm) = memory_sync::qdrant::QdrantMemory::new(
+                            url,
+                            mc.qdrant_api_key.clone(),
+                            mc.qdrant_collection_name.clone(),
+                            None,
+                        ) {
+                            if let Err(e) = qm.store_text(
+                                &content_clone,
+                                vec!["memory_note".to_string(), title_clone.clone()],
+                                Some(format!("vault/memory/{title_clone}.md")),
+                            ).await {
+                                tracing::warn!("memory_note: Qdrant index failed: {e}");
+                            }
+                        }
+                    }
+                }
+            });
+
+            agent_core::types::ToolResult {
+                call_id,
+                success: true,
+                output: json!({
+                    "saved": file_path.display().to_string(),
+                    "title": safe_title,
+                    "bytes": final_content.len(),
+                    "wiki_links_applied": linked_content != content,
+                }),
+            }
+        }
         Err(e) => agent_core::types::ToolResult {
             call_id,
             success: false,
             output: json!({ "error": format!("write failed: {e}") }),
         },
+    }
+}
+
+/// Apply Obsidian wiki links `[[note title]]` to content.
+///
+/// Scans all `.md` files recursively under `vault_path`, collects their stems,
+/// and replaces the first standalone occurrence of each stem in non-code-fence
+/// lines with `[[stem]]`. Skips the note being written itself.
+fn apply_wiki_links(content: &str, vault_path: &std::path::Path, self_title: &str) -> String {
+    // Collect all vault note stems recursively
+    let stems = collect_vault_stems(vault_path);
+    if stems.is_empty() {
+        return content.to_string();
+    }
+
+    let mut output = String::with_capacity(content.len() + 64);
+    let mut in_code_fence = false;
+    // Track which stems have been linked already (link once per note)
+    let mut linked: std::collections::HashSet<String> = std::collections::HashSet::new();
+
+    for line in content.lines() {
+        let trimmed = line.trim_start();
+        // Toggle code fence tracking
+        if trimmed.starts_with("```") || trimmed.starts_with("~~~") {
+            in_code_fence = !in_code_fence;
+            output.push_str(line);
+            output.push('\n');
+            continue;
+        }
+        if in_code_fence {
+            output.push_str(line);
+            output.push('\n');
+            continue;
+        }
+
+        let processed = apply_wiki_links_to_line(line, &stems, self_title, &mut linked);
+        output.push_str(&processed);
+        output.push('\n');
+    }
+
+    // Remove trailing newline added by the loop if the original had none
+    if !content.ends_with('\n') && output.ends_with('\n') {
+        output.pop();
+    }
+    output
+}
+
+/// Replace first occurrence of each vault stem in a single line with `[[stem]]`.
+fn apply_wiki_links_to_line(
+    line: &str,
+    stems: &[(String, String)], // (lower_stem, display_stem)
+    self_title: &str,
+    linked: &mut std::collections::HashSet<String>,
+) -> String {
+    let mut result = line.to_string();
+
+    for (lower, display) in stems {
+        // Skip self-reference
+        if lower == &self_title.to_lowercase() { continue; }
+        // Skip already linked
+        if linked.contains(lower) { continue; }
+        // Skip if already a wiki link in the line
+        if result.contains(&format!("[[{display}]]")) || result.contains(&format!("[[{lower}]]")) {
+            linked.insert(lower.clone());
+            continue;
+        }
+
+        // Find a whole-word, case-insensitive match not inside [[...]]
+        if let Some(new_line) = replace_first_word_match(&result, lower, display) {
+            result = new_line;
+            linked.insert(lower.clone());
+        }
+    }
+    result
+}
+
+/// Replace the first whole-word case-insensitive occurrence of `term` in `text`
+/// with `[[display]]`, but only if the match is not already inside `[[...]]`.
+fn replace_first_word_match(text: &str, term: &str, display: &str) -> Option<String> {
+    let lower_text = text.to_lowercase();
+    let lower_term = term.to_lowercase();
+
+    let mut search_start = 0;
+    while let Some(pos) = lower_text[search_start..].find(&lower_term) {
+        let abs_pos = search_start + pos;
+        let end_pos = abs_pos + term.len();
+
+        // Check word boundaries
+        let before_ok = abs_pos == 0 || {
+            let prev = lower_text.as_bytes()[abs_pos - 1] as char;
+            !prev.is_alphanumeric() && prev != '_' && prev != '-'
+        };
+        let after_ok = end_pos >= lower_text.len() || {
+            let next = lower_text.as_bytes()[end_pos] as char;
+            !next.is_alphanumeric() && next != '_' && next != '-'
+        };
+
+        if before_ok && after_ok {
+            // Make sure we're not inside [[...]]
+            let before = &text[..abs_pos];
+            let open_brackets = before.matches("[[").count();
+            let close_brackets = before.matches("]]").count();
+            if open_brackets > close_brackets {
+                // Inside an existing link — skip
+                search_start = end_pos;
+                continue;
+            }
+            // Also skip inline code spans `...`
+            let backtick_count = before.chars().filter(|&c| c == '`').count();
+            if backtick_count % 2 != 0 {
+                search_start = end_pos;
+                continue;
+            }
+
+            let mut out = text[..abs_pos].to_string();
+            out.push_str(&format!("[[{display}]]"));
+            out.push_str(&text[end_pos..]);
+            return Some(out);
+        }
+        search_start = end_pos;
+    }
+    None
+}
+
+/// Recursively collect all `.md` file stems (filename without extension) from the vault.
+/// Returns pairs of (lowercase_stem, display_stem).
+fn collect_vault_stems(vault_path: &std::path::Path) -> Vec<(String, String)> {
+    let mut stems = Vec::new();
+    collect_stems_recursive(vault_path, vault_path, &mut stems);
+    stems
+}
+
+fn collect_stems_recursive(
+    root: &std::path::Path,
+    dir: &std::path::Path,
+    stems: &mut Vec<(String, String)>,
+) {
+    let Ok(entries) = std::fs::read_dir(dir) else { return };
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if path.is_dir() {
+            // Skip hidden dirs
+            if path.file_name().and_then(|n| n.to_str()).map(|n| n.starts_with('.')).unwrap_or(false) {
+                continue;
+            }
+            collect_stems_recursive(root, &path, stems);
+        } else if path.extension().and_then(|e| e.to_str()) == Some("md") {
+            if let Some(stem) = path.file_stem().and_then(|s| s.to_str()) {
+                stems.push((stem.to_lowercase(), stem.to_string()));
+            }
+        }
     }
 }
 
@@ -1014,67 +1196,137 @@ async fn build_context_messages(
 ) -> Option<String> {
     use context_engine::{ContextEngine, EngineConfig, RelevanceHints};
 
-    let cwd = std::env::current_dir().ok()?;
-    let config = EngineConfig::new(&cwd);
-    let engine = ContextEngine::new(config).with_memory(memory);
-
     let keywords = extract_keywords(prompt);
-    let hints = RelevanceHints { keywords, referenced_paths: vec![], root: Some(cwd) };
+    let cwd = std::env::current_dir().ok()?;
+    let engine_config = EngineConfig::new(&cwd);
+    let engine = ContextEngine::new(engine_config).with_memory(Arc::clone(&memory));
 
-    let result = tokio::time::timeout(
-        std::time::Duration::from_secs(2),
+    let hints = RelevanceHints {
+        keywords: keywords.clone(),
+        referenced_paths: vec![],
+        root: Some(cwd),
+    };
+
+    let engine_result = tokio::time::timeout(
+        std::time::Duration::from_secs(3),
         engine.build_context(hints, None),
     )
     .await
     .ok()
     .and_then(|r| r.ok());
 
-    match result {
-        Some((packed, stats)) => {
-            if packed.blocks.is_empty() {
-                return None;
-            }
-            tracing::debug!(
-                "context engine: {} files selected, ~{} tokens",
-                stats.files_selected,
-                packed.total_tokens
-            );
-            // Emit one event listing all selected files
-            let file_list: Vec<String> = packed.blocks
-                .iter()
-                .map(|b| b.path.display().to_string())
-                .collect();
-            if !file_list.is_empty() {
-                event_bus.emit(AgentEvent::DataSourceAccessed {
-                    run_id: run_id.clone(),
-                    source: "context_files".to_string(),
-                    detail: file_list.join(", "),
-                    timestamp: Utc::now(),
-                });
-            }
-            // Emit Qdrant event if memory snippets were included
-            if stats.memory_snippets > 0 {
-                event_bus.emit(AgentEvent::DataSourceAccessed {
-                    run_id: run_id.clone(),
-                    source: "qdrant".to_string(),
-                    detail: format!("{} snippet(s) retrieved for: {}", stats.memory_snippets, prompt.chars().take(80).collect::<String>()),
-                    timestamp: Utc::now(),
-                });
-            }
-            let mut ctx = format!(
-                "# Project Context ({} files, ~{} tokens)\n\n",
-                stats.files_selected, packed.total_tokens
-            );
-            for block in &packed.blocks {
-                ctx.push_str(&format!(
-                    "## {}\n```\n{}\n```\n\n",
-                    block.path.display(),
-                    block.content
-                ));
-            }
-            Some(ctx)
+    if let Some((packed, stats)) = engine_result {
+        // Emit file context event
+        let file_list: Vec<String> = packed.blocks.iter().map(|b| b.path.display().to_string()).collect();
+        if !file_list.is_empty() {
+            event_bus.emit(AgentEvent::DataSourceAccessed {
+                run_id: run_id.clone(),
+                source: "context_files".to_string(),
+                detail: file_list.join(", "),
+                timestamp: Utc::now(),
+            });
         }
-        None => None,
+
+        // Emit separate DataSourceAccessed for vault and qdrant based on snippet provenance
+        emit_memory_events(&packed.memory_snippets, run_id, event_bus, prompt);
+
+        let has_content = !packed.blocks.is_empty() || !packed.memory_snippets.is_empty();
+        if !has_content {
+            // Try direct memory fallback
+            return direct_memory_context(memory, &keywords, run_id, event_bus, prompt).await;
+        }
+
+        tracing::debug!(
+            "context engine: {} files, {} memory snippets, ~{} tokens",
+            stats.files_selected, stats.memory_snippets, packed.total_tokens
+        );
+
+        let mut ctx = String::new();
+        if !packed.blocks.is_empty() {
+            ctx.push_str(&format!("# Project Context ({} files)\n\n", stats.files_selected));
+            for block in &packed.blocks {
+                ctx.push_str(&format!("## {}\n```\n{}\n```\n\n", block.path.display(), block.content));
+            }
+        }
+        // Include memory snippets explicitly (packed.render() would double-include file blocks)
+        if !packed.memory_snippets.is_empty() {
+            ctx.push_str("# Remembered Context\n\n");
+            for snip in &packed.memory_snippets {
+                ctx.push_str(&format!("<!-- {} -->\n{}\n\n", snip.source, snip.content));
+            }
+        }
+        return Some(ctx);
+    }
+
+    // Context engine failed (e.g. not in a project dir) — fall back to memory-only
+    direct_memory_context(memory, &keywords, run_id, event_bus, prompt).await
+}
+
+/// Retrieve memory snippets directly (bypassing file scanning) and format them as context.
+async fn direct_memory_context(
+    memory: Arc<dyn context_engine::memory::MemoryRetriever>,
+    keywords: &[String],
+    run_id: &RunId,
+    event_bus: &agent_core::bus::EventBus,
+    prompt: &str,
+) -> Option<String> {
+    use context_engine::memory::MemoryQuery;
+
+    let query = MemoryQuery {
+        keywords: keywords.to_vec(),
+        max_snippets: 8,
+        max_tokens_per_snippet: 600,
+        total_token_budget: 3_000,
+        ..Default::default()
+    };
+    let snippets = tokio::time::timeout(
+        std::time::Duration::from_secs(2),
+        memory.retrieve(&query),
+    )
+    .await
+    .unwrap_or_default();
+
+    if snippets.is_empty() {
+        return None;
+    }
+
+    emit_memory_events(&snippets, run_id, event_bus, prompt);
+
+    let mut ctx = String::from("# Remembered Context\n\n");
+    for snip in &snippets {
+        ctx.push_str(&format!("<!-- {} -->\n{}\n\n", snip.source, snip.content));
+    }
+    Some(ctx)
+}
+
+/// Emit DataSourceAccessed events for vault vs qdrant memory snippets.
+fn emit_memory_events(
+    snippets: &[context_engine::packer::MemorySnippet],
+    run_id: &RunId,
+    event_bus: &agent_core::bus::EventBus,
+    prompt: &str,
+) {
+    let vault_files: Vec<&str> = snippets.iter()
+        .filter(|s| s.source.starts_with("vault/"))
+        .map(|s| s.source.as_str())
+        .collect();
+    let qdrant_count = snippets.iter().filter(|s| s.source == "qdrant").count();
+
+    if !vault_files.is_empty() {
+        event_bus.emit(AgentEvent::DataSourceAccessed {
+            run_id: run_id.clone(),
+            source: "obsidian".to_string(),
+            detail: vault_files.iter().map(|s| s.trim_start_matches("vault/")).collect::<Vec<_>>().join(", "),
+            timestamp: Utc::now(),
+        });
+    }
+    if qdrant_count > 0 {
+        event_bus.emit(AgentEvent::DataSourceAccessed {
+            run_id: run_id.clone(),
+            source: "qdrant".to_string(),
+            detail: format!("{} snippet(s) for: {}", qdrant_count, prompt.chars().take(80).collect::<String>()),
+            timestamp: Utc::now(),
+        });
     }
 }
 

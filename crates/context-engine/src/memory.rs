@@ -13,6 +13,7 @@ use crate::packer::MemorySnippet;
 use crate::tokens;
 use async_trait::async_trait;
 use std::path::PathBuf;
+use std::sync::Arc;
 
 /// A query for memory retrieval.
 #[derive(Debug, Clone)]
@@ -117,6 +118,22 @@ impl VaultMemory {
     pub fn new(vault_root: impl AsRef<std::path::Path>) -> Self {
         Self { vault_root: vault_root.as_ref().to_path_buf() }
     }
+
+    /// Recursively collect all `.md` file paths under `dir`.
+    fn collect_md_files(dir: &PathBuf) -> Vec<PathBuf> {
+        let mut result = Vec::new();
+        let Ok(entries) = std::fs::read_dir(dir) else { return result };
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.is_dir() {
+                result.extend(Self::collect_md_files(&path));
+            } else if path.extension().and_then(|x| x.to_str()) == Some("md") {
+                result.push(path);
+            }
+        }
+        result.sort();
+        result
+    }
 }
 
 #[async_trait]
@@ -125,22 +142,7 @@ impl MemoryRetriever for VaultMemory {
         let mut snippets = Vec::new();
         let mut total_tokens = 0u32;
 
-        let entries = match std::fs::read_dir(&self.vault_root) {
-            Ok(e) => e,
-            Err(_) => return snippets,
-        };
-
-        let mut paths: Vec<_> = entries
-            .flatten()
-            .filter(|e| {
-                e.path()
-                    .extension()
-                    .and_then(|x| x.to_str())
-                    .map(|x| x == "md")
-                    .unwrap_or(false)
-            })
-            .map(|e| e.path())
-            .collect();
+        let mut paths = Self::collect_md_files(&self.vault_root);
         paths.sort();
 
         for path in paths {
@@ -156,11 +158,11 @@ impl MemoryRetriever for VaultMemory {
                 Err(_) => continue,
             };
 
-            let source = path
-                .file_name()
-                .and_then(|n| n.to_str())
-                .unwrap_or("unknown")
-                .to_string();
+            // Source: "vault/{relative/path.md}" for structured provenance
+            let rel = path.strip_prefix(&self.vault_root)
+                .map(|p| p.display().to_string())
+                .unwrap_or_else(|_| path.file_name().and_then(|n| n.to_str()).unwrap_or("unknown").to_string());
+            let source = format!("vault/{rel}");
 
             let snip_tokens = tokens::estimate(&content);
             let (final_content, final_tokens) = if snip_tokens > query.max_tokens_per_snippet {
@@ -175,7 +177,7 @@ impl MemoryRetriever for VaultMemory {
             let matches = query.keywords.is_empty()
                 || query.keywords.iter().any(|kw| {
                     final_content.to_lowercase().contains(&kw.to_lowercase())
-                        || source.to_lowercase().contains(&kw.to_lowercase())
+                        || rel.to_lowercase().contains(&kw.to_lowercase())
                 });
 
             if matches {
@@ -189,6 +191,60 @@ impl MemoryRetriever for VaultMemory {
         }
 
         snippets
+    }
+}
+
+/// A memory retriever that combines multiple backends.
+/// Results are interleaved in round-robin order (one from each backend in turn)
+/// to prevent any single backend from dominating, with per-snippet deduplication
+/// and global token budget enforcement.
+pub struct CombinedMemory {
+    retrievers: Vec<Arc<dyn MemoryRetriever>>,
+}
+
+impl CombinedMemory {
+    pub fn new(retrievers: Vec<Arc<dyn MemoryRetriever>>) -> Self {
+        Self { retrievers }
+    }
+}
+
+#[async_trait]
+impl MemoryRetriever for CombinedMemory {
+    async fn retrieve(&self, query: &MemoryQuery) -> Vec<MemorySnippet> {
+        // Fan-out all retrievers concurrently.
+        let per_source_budget = query.total_token_budget / self.retrievers.len().max(1) as u32;
+        let sub_query = MemoryQuery {
+            total_token_budget: per_source_budget,
+            ..query.clone()
+        };
+        let mut all_lists: Vec<Vec<MemorySnippet>> = Vec::with_capacity(self.retrievers.len());
+        for r in self.retrievers.iter() {
+            let list: Vec<MemorySnippet> = r.retrieve(&sub_query).await;
+            all_lists.push(list);
+        }
+
+        // Round-robin interleave: one from each source in turn.
+        let mut result: Vec<MemorySnippet> = Vec::new();
+        let mut seen: std::collections::HashSet<String> = std::collections::HashSet::new();
+        let mut total_tokens = 0u32;
+        let max_idx = all_lists.iter().map(|l| l.len()).max().unwrap_or(0);
+
+        for i in 0..max_idx {
+            for list in &all_lists {
+                if let Some(snip) = list.get(i) {
+                    if result.len() >= query.max_snippets { break; }
+                    if total_tokens + snip.tokens > query.total_token_budget { continue; }
+                    // Dedupe by content prefix
+                    let key = snip.content.chars().take(80).collect::<String>();
+                    if seen.insert(key) {
+                        total_tokens += snip.tokens;
+                        result.push(snip.clone());
+                    }
+                }
+            }
+            if result.len() >= query.max_snippets { break; }
+        }
+        result
     }
 }
 
