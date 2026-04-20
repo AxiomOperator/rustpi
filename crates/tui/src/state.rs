@@ -14,6 +14,7 @@ pub enum PaneId {
 pub struct AppState {
     pub messages: Vec<ChatMessage>,
     pub streaming_chunk: String,
+    pub is_thinking: bool,
     pub tool_events: VecDeque<ToolActivity>,
     pub context_info: Option<ContextInfo>,
     pub sessions: Vec<SessionSummary>,
@@ -32,6 +33,7 @@ impl AppState {
         Self {
             messages: Vec::new(),
             streaming_chunk: String::new(),
+            is_thinking: false,
             tool_events: VecDeque::new(),
             context_info: None,
             sessions: Vec::new(),

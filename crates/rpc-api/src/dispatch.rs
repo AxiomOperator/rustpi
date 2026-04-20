@@ -848,16 +848,10 @@ async fn emit_run_failed<W>(
     let _ = writer.write(&RpcResponse::StreamEvent { event: rpc_event }).await;
 }
 
-/// Build the primary system message, optionally prepending vault personality content.
+/// Build the primary system message from the Obsidian vault personality.
+/// Returns an empty string if no vault is configured or loading fails.
 async fn build_system_message() -> String {
-    const BASE: &str = "You are rustpi, an AI coding assistant. \
-        You help with software development tasks: code generation, \
-        debugging, code review, and technical explanations. Be concise and precise.";
-
-    match try_load_personality().await {
-        Some(p) if !p.is_empty() => format!("{}\n\n{}", p, BASE),
-        _ => BASE.to_string(),
-    }
+    try_load_personality().await.unwrap_or_default()
 }
 
 /// Try to load personality sections from the configured Obsidian vault.

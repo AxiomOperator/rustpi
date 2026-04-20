@@ -116,6 +116,20 @@ pub fn render(frame: &mut Frame, state: &AppState, area: Rect, input_buffer: &st
         message_item(&ts, prefix, color, &m.content, msg_area.width)
     }).collect();
 
+    if state.is_thinking && state.streaming_chunk.is_empty() {
+        // Animated spinner: cycles every 250 ms (matches the tick interval)
+        const FRAMES: &[&str] = &["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
+        let frame_idx = (chrono::Utc::now().timestamp_millis() / 250) as usize % FRAMES.len();
+        let spinner = FRAMES[frame_idx];
+        let ts = chrono::Utc::now().format("%H:%M").to_string();
+        let line = Line::from(vec![
+            Span::styled(format!("{} ", ts), Style::default().fg(Color::DarkGray)),
+            Span::styled("[Agent]  ", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
+            Span::styled(format!("{} thinking…", spinner), Style::default().fg(Color::DarkGray).add_modifier(Modifier::ITALIC)),
+        ]);
+        items.push(ListItem::new(line));
+    }
+
     if !state.streaming_chunk.is_empty() {
         let ts = chrono::Utc::now().format("%H:%M").to_string();
         let header_len = 6 + "[Agent]  ".len();

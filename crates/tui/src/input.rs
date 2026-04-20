@@ -38,8 +38,6 @@ pub fn map_key(key: KeyEvent) -> KeyAction {
         (KeyCode::PageUp, _) => KeyAction::PageUp,
         (KeyCode::PageDown, _) => KeyAction::PageDown,
         (KeyCode::Char('i'), KeyModifiers::CONTROL) => KeyAction::Interrupt,
-        (KeyCode::Char('y'), KeyModifiers::NONE) => KeyAction::ApproveAction,
-        (KeyCode::Char('n'), KeyModifiers::NONE) => KeyAction::DenyAction,
         (KeyCode::Enter, _) => KeyAction::SubmitInput,
         (KeyCode::Backspace, _) => KeyAction::Backspace,
         (KeyCode::Char('?'), _) => KeyAction::Help,

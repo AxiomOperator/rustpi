@@ -152,7 +152,19 @@ impl App {
             KeyAction::FocusSessions => self.state.focused_pane = PaneId::Sessions,
             KeyAction::FocusAuth => self.state.focused_pane = PaneId::Auth,
             KeyAction::FocusLogs => self.state.focused_pane = PaneId::Logs,
-            KeyAction::TypeChar(c) => self.input_buffer.push(c),
+            KeyAction::TypeChar(c) => {
+                // y/n are contextual: approve/deny only when a tool approval is pending,
+                // otherwise type the character normally.
+                if c == 'y' && self.state.pending_approval.is_some() {
+                    self.state.pending_approval.take();
+                    self.state.status_message = Some("Action approved".to_string());
+                } else if c == 'n' && self.state.pending_approval.is_some() {
+                    self.state.pending_approval.take();
+                    self.state.status_message = Some("Action denied".to_string());
+                } else {
+                    self.input_buffer.push(c);
+                }
+            }
             KeyAction::Backspace => { self.input_buffer.pop(); }
             KeyAction::SubmitInput => {
                 if !self.input_buffer.is_empty() {
@@ -189,16 +201,7 @@ impl App {
                     self.state.status_message = Some("Interrupt requested".to_string());
                 }
             }
-            KeyAction::ApproveAction => {
-                if self.state.pending_approval.take().is_some() {
-                    self.state.status_message = Some("Action approved".to_string());
-                }
-            }
-            KeyAction::DenyAction => {
-                if self.state.pending_approval.take().is_some() {
-                    self.state.status_message = Some("Action denied".to_string());
-                }
-            }
+            KeyAction::ApproveAction | KeyAction::DenyAction => {}
             KeyAction::Help => {
                 self.state.status_message = Some(
                     "Keys: 1-6 focus panes | q quit | Ctrl+C quit | j/k scroll | Ctrl+I interrupt | y/n approve".to_string()
@@ -271,6 +274,7 @@ async fn run_pipeline(state: Arc<ServerState>, mut input_rx: mpsc::Receiver<Stri
 pub fn apply_agent_event(state: &mut AppState, event: AgentEvent) {
     match event {
         AgentEvent::TokenChunk { delta, .. } => {
+            state.is_thinking = false;
             state.streaming_chunk.push_str(&delta);
         }
         AgentEvent::RunCompleted { run_id, .. } => {
@@ -284,6 +288,7 @@ pub fn apply_agent_event(state: &mut AppState, event: AgentEvent) {
                 });
             }
             state.active_run_id = None;
+            state.is_thinking = false;
             state.status_message = Some("Ready".to_string());
             state.log_entries.push_back(LogEntry {
                 level: "info".to_string(),
@@ -303,6 +308,7 @@ pub fn apply_agent_event(state: &mut AppState, event: AgentEvent) {
                 });
             }
             state.active_run_id = None;
+            state.is_thinking = false;
             state.status_message = Some(format!("Error: {}", reason));
             state.log_entries.push_back(LogEntry {
                 level: "error".to_string(),
@@ -313,6 +319,7 @@ pub fn apply_agent_event(state: &mut AppState, event: AgentEvent) {
         }
         AgentEvent::RunStarted { run_id, .. } => {
             state.active_run_id = Some(run_id.to_string());
+            state.is_thinking = true;
             state.log_entries.push_back(LogEntry {
                 level: "info".to_string(),
                 message: format!("Run {} started", run_id),
