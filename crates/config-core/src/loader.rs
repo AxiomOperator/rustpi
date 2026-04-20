@@ -69,6 +69,7 @@ impl Merge for MemoryConfig {
     fn merge(base: Self, over: Self) -> Self {
         MemoryConfig {
             obsidian_vault_path: over.obsidian_vault_path.or(base.obsidian_vault_path),
+            obsidian_personality_subfolder: over.obsidian_personality_subfolder.or(base.obsidian_personality_subfolder),
             session_backend: over.session_backend,
             qdrant_enabled: over.qdrant_enabled || base.qdrant_enabled,
             qdrant_url: over.qdrant_url.or(base.qdrant_url),

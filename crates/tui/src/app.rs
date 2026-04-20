@@ -23,7 +23,7 @@ use rpc_api::{LineReader, LineWriter};
 use crate::input::{map_key, KeyAction};
 use crate::layout::compute_layout;
 use crate::panes;
-use crate::state::{AppState, ChatMessage, ContextInfo, LogEntry, MessageRole, PaneId, ProviderStatus, SessionSummary, ToolActivity, ToolStatus};
+use crate::state::{AppState, ChatMessage, ContextInfo, DataSourceActivity, LogEntry, MessageRole, PaneId, ProviderStatus, SessionSummary, ToolActivity, ToolStatus};
 
 pub struct App {
     pub state: AppState,
@@ -44,7 +44,7 @@ impl App {
             }
         }).collect();
 
-        let mut state = AppState::new();
+        let mut state = AppState::new().with_theme_name(&config.tui.theme);
         state.providers = providers;
 
         Self {
@@ -104,10 +104,15 @@ impl App {
                 panes::tools::render(frame, &self.state, rects.tools);
                 panes::session::render(frame, &self.state, rects.sessions);
                 panes::context::render(frame, &self.state, rects.context);
+                panes::datasources::render(frame, rects.data_sources, &self.state);
                 panes::auth::render(frame, &self.state, rects.auth);
                 panes::logs::render(frame, &self.state, rects.logs);
 
                 render_status_bar(frame, &self.state, rects.status_bar);
+
+                if self.state.show_theme_selector {
+                    render_theme_selector(frame, &self.state);
+                }
             })?;
 
             tokio::select! {
@@ -116,9 +121,16 @@ impl App {
                     match maybe_event {
                         Some(Ok(Event::Key(key))) => {
                             if key.kind == KeyEventKind::Press {
-                                let action = map_key(key);
-                                if self.handle_action(action) {
-                                    break;
+                                // Theme selector is a modal — handle it before normal dispatch
+                                if self.state.show_theme_selector {
+                                    if self.handle_theme_selector_key(key) {
+                                        break; // quit signal from modal (unlikely but safe)
+                                    }
+                                } else {
+                                    let action = map_key(key);
+                                    if self.handle_action(action) {
+                                        break;
+                                    }
                                 }
                             }
                         }
@@ -152,6 +164,7 @@ impl App {
             KeyAction::FocusSessions => self.state.focused_pane = PaneId::Sessions,
             KeyAction::FocusAuth => self.state.focused_pane = PaneId::Auth,
             KeyAction::FocusLogs => self.state.focused_pane = PaneId::Logs,
+            KeyAction::FocusDataSources => self.state.focused_pane = PaneId::DataSources,
             KeyAction::TypeChar(c) => {
                 // y/n are contextual: approve/deny only when a tool approval is pending,
                 // otherwise type the character normally.
@@ -204,8 +217,11 @@ impl App {
             KeyAction::ApproveAction | KeyAction::DenyAction => {}
             KeyAction::Help => {
                 self.state.status_message = Some(
-                    "Keys: 1-6 focus panes | q quit | Ctrl+C quit | j/k scroll | Ctrl+I interrupt | y/n approve".to_string()
+                    "Keys: 1-7 focus panes | q quit | Ctrl+C quit | j/k scroll | Ctrl+I interrupt | y/n approve | Ctrl+T theme".to_string()
                 );
+            }
+            KeyAction::OpenThemeSelector => {
+                self.state.show_theme_selector = true;
             }
             KeyAction::PageUp => {
                 let offset = self.scroll_offsets.entry(self.state.focused_pane.clone()).or_insert(0);
@@ -216,6 +232,40 @@ impl App {
                 if *offset >= 10 { *offset -= 10; } else { *offset = 0; }
             }
             KeyAction::None => {}
+        }
+        false
+    }
+
+    /// Handle keys when the theme selector modal is open. Returns true only if app should quit.
+    fn handle_theme_selector_key(&mut self, key: crossterm::event::KeyEvent) -> bool {
+        use crossterm::event::{KeyCode, KeyModifiers};
+        let themes = crate::theme::all_themes();
+        let count = themes.len();
+        match (key.code, key.modifiers) {
+            (KeyCode::Esc, _) | (KeyCode::Char('t'), KeyModifiers::CONTROL) => {
+                self.state.show_theme_selector = false;
+            }
+            (KeyCode::Char('q'), KeyModifiers::NONE) | (KeyCode::Char('c'), KeyModifiers::CONTROL) => {
+                self.state.show_theme_selector = false;
+                return true; // propagate quit
+            }
+            (KeyCode::Up, _) | (KeyCode::Char('k'), _) => {
+                if self.state.theme_selector_cursor > 0 {
+                    self.state.theme_selector_cursor -= 1;
+                } else {
+                    self.state.theme_selector_cursor = count.saturating_sub(1);
+                }
+            }
+            (KeyCode::Down, _) | (KeyCode::Char('j'), _) => {
+                self.state.theme_selector_cursor = (self.state.theme_selector_cursor + 1) % count;
+            }
+            (KeyCode::Enter, _) => {
+                if let Some(chosen) = themes.into_iter().nth(self.state.theme_selector_cursor) {
+                    self.state.theme = chosen;
+                }
+                self.state.show_theme_selector = false;
+            }
+            _ => {}
         }
         false
     }
@@ -442,6 +492,16 @@ pub fn apply_agent_event(state: &mut AppState, event: AgentEvent) {
             });
             trim_log(state);
         }
+        AgentEvent::DataSourceAccessed { source, detail, timestamp, .. } => {
+            while state.data_sources.len() >= 200 {
+                state.data_sources.pop_front();
+            }
+            state.data_sources.push_back(DataSourceActivity {
+                source,
+                detail,
+                timestamp,
+            });
+        }
         other => {
             let msg = format!("{:?}", other);
             let msg = if msg.len() > 120 { format!("{}…", &msg[..120]) } else { msg };
@@ -462,21 +522,81 @@ fn trim_log(state: &mut AppState) {
 }
 
 fn render_status_bar(frame: &mut ratatui::Frame, state: &AppState, area: ratatui::layout::Rect) {
-    use ratatui::style::{Color, Style};
+    use ratatui::style::Style;
     use ratatui::widgets::Paragraph;
 
     let session = state.active_session_id.as_deref().unwrap_or("none");
     let run_status = if state.active_run_id.is_some() { "active" } else { "idle" };
     let msg = state.status_message.as_deref().unwrap_or("");
+    let theme = &state.theme;
 
     let text = format!(
-        " [Session: {}] [Run: {}] {} | Keys: 1-6 panes | q quit | Ctrl+I interrupt | y/n approve | ? help",
+        " [Session: {}] [Run: {}] {} | 1-7 panes | q quit | Ctrl+I interrupt | y/n approve | Ctrl+T theme | ? help",
         &session[..session.len().min(8)],
         run_status,
         msg,
     );
 
     let para = Paragraph::new(text)
-        .style(Style::default().bg(Color::DarkGray).fg(Color::White));
+        .style(Style::default().bg(theme.status_bar_bg).fg(theme.status_bar_fg));
     frame.render_widget(para, area);
+}
+
+fn render_theme_selector(frame: &mut ratatui::Frame, state: &AppState) {
+    use ratatui::layout::{Constraint, Direction, Layout, Rect};
+    use ratatui::style::{Modifier, Style};
+    use ratatui::text::{Line, Span};
+    use ratatui::widgets::{Block, Borders, Clear, List, ListItem, ListState};
+
+    let theme = &state.theme;
+    let themes = crate::theme::all_themes();
+
+    // Center a popup: 30 wide, themes.len()+4 tall
+    let popup_w = 34u16;
+    let popup_h = (themes.len() as u16) + 4;
+    let area = frame.area();
+    let x = area.x + area.width.saturating_sub(popup_w) / 2;
+    let y = area.y + area.height.saturating_sub(popup_h) / 2;
+    let popup_rect = Rect { x, y, width: popup_w.min(area.width), height: popup_h.min(area.height) };
+
+    frame.render_widget(Clear, popup_rect);
+
+    let block = Block::default()
+        .title(" Select Theme (↑/↓ Enter) ")
+        .borders(Borders::ALL)
+        .border_style(Style::default().fg(theme.border_focused));
+
+    let items: Vec<ListItem> = themes.iter().enumerate().map(|(i, t)| {
+        if i == state.theme_selector_cursor {
+            ListItem::new(Line::from(vec![
+                Span::styled(
+                    format!("▶ {}", t.name),
+                    Style::default()
+                        .fg(theme.border_focused)
+                        .add_modifier(Modifier::BOLD),
+                ),
+            ]))
+        } else {
+            ListItem::new(Line::from(vec![
+                Span::styled(
+                    format!("  {}", t.name),
+                    Style::default().fg(theme.text_primary),
+                ),
+            ]))
+        }
+    }).collect();
+
+    // Add a hint line at bottom
+    let hint = Line::from(Span::styled(
+        "  Esc to cancel",
+        Style::default().fg(theme.text_dim),
+    ));
+    let mut all_items = items;
+    all_items.push(ListItem::new(Line::from("")));
+    all_items.push(ListItem::new(hint));
+
+    let list = List::new(all_items).block(block);
+    let mut list_state = ListState::default();
+    list_state.select(Some(state.theme_selector_cursor));
+    frame.render_stateful_widget(list, popup_rect, &mut list_state);
 }

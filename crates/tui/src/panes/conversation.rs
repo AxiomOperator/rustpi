@@ -1,5 +1,5 @@
 use ratatui::layout::{Constraint, Direction, Layout, Rect};
-use ratatui::style::{Color, Modifier, Style};
+use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span, Text};
 use ratatui::widgets::{Block, Borders, List, ListItem, Paragraph};
 use ratatui::Frame;
@@ -22,7 +22,6 @@ fn wrap_text(content: &str, max_width: usize) -> Vec<String> {
         for word in raw_line.split_whitespace() {
             if current.is_empty() {
                 if word.len() > max_width {
-                    // Hard-wrap single long word
                     let mut pos = 0;
                     while pos < word.len() {
                         let end = (pos + max_width).min(word.len());
@@ -60,42 +59,8 @@ fn wrap_text(content: &str, max_width: usize) -> Vec<String> {
     lines
 }
 
-/// Build a multi-line `ListItem` with word-wrapped content.
-fn message_item<'a>(
-    ts: &str,
-    prefix: &'static str,
-    color: Color,
-    content: &str,
-    area_width: u16,
-) -> ListItem<'a> {
-    // Available width: area minus borders (2) minus timestamp+space (6) minus prefix (9)
-    let header_len = 6 + prefix.len(); // "HH:MM " + prefix
-    let content_width = (area_width as usize).saturating_sub(2 + header_len);
-    let wrapped = wrap_text(content, content_width);
-
-    let indent = " ".repeat(header_len);
-    let ts_style = Style::default().fg(Color::DarkGray);
-    let prefix_style = Style::default().fg(color).add_modifier(Modifier::BOLD);
-
-    let mut lines: Vec<Line> = Vec::with_capacity(wrapped.len());
-    for (i, part) in wrapped.into_iter().enumerate() {
-        if i == 0 {
-            lines.push(Line::from(vec![
-                Span::styled(format!("{} ", ts), ts_style),
-                Span::styled(prefix, prefix_style),
-                Span::raw(part),
-            ]));
-        } else {
-            lines.push(Line::from(vec![
-                Span::raw(indent.clone()),
-                Span::raw(part),
-            ]));
-        }
-    }
-    ListItem::new(Text::from(lines))
-}
-
 pub fn render(frame: &mut Frame, state: &AppState, area: Rect, input_buffer: &str) {
+    let theme = &state.theme;
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([Constraint::Min(1), Constraint::Length(3)])
@@ -104,28 +69,48 @@ pub fn render(frame: &mut Frame, state: &AppState, area: Rect, input_buffer: &st
     let msg_area = chunks[0];
     let input_area = chunks[1];
 
-    let bstyle = border_style(&PaneId::Conversation, &state.focused_pane);
+    let bstyle = border_style(&PaneId::Conversation, &state.focused_pane, theme);
     let mut items: Vec<ListItem> = state.messages.iter().map(|m| {
         let (prefix, color) = match m.role {
-            MessageRole::User => ("[You]    ", Color::Green),
-            MessageRole::Assistant => ("[Agent]  ", Color::Cyan),
-            MessageRole::System => ("[System] ", Color::Yellow),
-            MessageRole::Tool => ("[Tool]   ", Color::Magenta),
+            MessageRole::User      => ("[You]    ", theme.role_user),
+            MessageRole::Assistant => ("[Agent]  ", theme.role_assistant),
+            MessageRole::System    => ("[System] ", theme.role_system),
+            MessageRole::Tool      => ("[Tool]   ", theme.role_tool),
         };
         let ts = m.timestamp.format("%H:%M").to_string();
-        message_item(&ts, prefix, color, &m.content, msg_area.width)
+        let header_len = 6 + prefix.len();
+        let content_width = (msg_area.width as usize).saturating_sub(2 + header_len);
+        let wrapped = wrap_text(&m.content, content_width);
+        let indent = " ".repeat(header_len);
+        let ts_style = Style::default().fg(theme.text_timestamp);
+        let prefix_style = Style::default().fg(color).add_modifier(Modifier::BOLD);
+        let mut lines: Vec<Line> = Vec::with_capacity(wrapped.len());
+        for (i, part) in wrapped.into_iter().enumerate() {
+            if i == 0 {
+                lines.push(Line::from(vec![
+                    Span::styled(format!("{} ", ts), ts_style),
+                    Span::styled(prefix, prefix_style),
+                    Span::raw(part),
+                ]));
+            } else {
+                lines.push(Line::from(vec![
+                    Span::raw(indent.clone()),
+                    Span::raw(part),
+                ]));
+            }
+        }
+        ListItem::new(Text::from(lines))
     }).collect();
 
     if state.is_thinking && state.streaming_chunk.is_empty() {
-        // Animated spinner: cycles every 250 ms (matches the tick interval)
         const FRAMES: &[&str] = &["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
         let frame_idx = (chrono::Utc::now().timestamp_millis() / 250) as usize % FRAMES.len();
         let spinner = FRAMES[frame_idx];
         let ts = chrono::Utc::now().format("%H:%M").to_string();
         let line = Line::from(vec![
-            Span::styled(format!("{} ", ts), Style::default().fg(Color::DarkGray)),
-            Span::styled("[Agent]  ", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
-            Span::styled(format!("{} thinking…", spinner), Style::default().fg(Color::DarkGray).add_modifier(Modifier::ITALIC)),
+            Span::styled(format!("{} ", ts), Style::default().fg(theme.text_timestamp)),
+            Span::styled("[Agent]  ", Style::default().fg(theme.role_assistant).add_modifier(Modifier::BOLD)),
+            Span::styled(format!("{} thinking…", spinner), Style::default().fg(theme.thinking).add_modifier(Modifier::ITALIC)),
         ]);
         items.push(ListItem::new(line));
     }
@@ -136,8 +121,9 @@ pub fn render(frame: &mut Frame, state: &AppState, area: Rect, input_buffer: &st
         let content_width = (msg_area.width as usize).saturating_sub(2 + header_len);
         let wrapped = wrap_text(&state.streaming_chunk, content_width);
         let indent = " ".repeat(header_len);
-        let ts_style = Style::default().fg(Color::DarkGray);
-        let prefix_style = Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD);
+        let ts_style = Style::default().fg(theme.text_timestamp);
+        let prefix_style = Style::default().fg(theme.role_assistant).add_modifier(Modifier::BOLD);
+        let cursor_style = Style::default().fg(theme.streaming_cursor).add_modifier(Modifier::SLOW_BLINK);
         let mut lines: Vec<Line> = Vec::new();
         let last = wrapped.len().saturating_sub(1);
         for (i, part) in wrapped.into_iter().enumerate() {
@@ -146,7 +132,7 @@ pub fn render(frame: &mut Frame, state: &AppState, area: Rect, input_buffer: &st
                     Span::styled(format!("{} ", ts), ts_style),
                     Span::styled("[Agent]  ", prefix_style),
                     Span::raw(part),
-                    Span::styled("▌", Style::default().fg(Color::Cyan).add_modifier(Modifier::SLOW_BLINK)),
+                    Span::styled("▌", cursor_style),
                 ]));
             } else if i == 0 {
                 lines.push(Line::from(vec![
@@ -158,7 +144,7 @@ pub fn render(frame: &mut Frame, state: &AppState, area: Rect, input_buffer: &st
                 lines.push(Line::from(vec![
                     Span::raw(indent.clone()),
                     Span::raw(part),
-                    Span::styled("▌", Style::default().fg(Color::Cyan).add_modifier(Modifier::SLOW_BLINK)),
+                    Span::styled("▌", cursor_style),
                 ]));
             } else {
                 lines.push(Line::from(vec![
@@ -174,7 +160,7 @@ pub fn render(frame: &mut Frame, state: &AppState, area: Rect, input_buffer: &st
         let line = Line::from(vec![
             Span::styled(
                 format!("⚠ Approve [{}]? (y=yes / n=no): {}", approval.tool_name, approval.description),
-                Style::default().fg(Color::Black).bg(Color::Yellow).add_modifier(Modifier::BOLD),
+                Style::default().fg(theme.approval_fg).bg(theme.approval_bg).add_modifier(Modifier::BOLD),
             ),
         ]);
         items.push(ListItem::new(line));
@@ -191,6 +177,8 @@ pub fn render(frame: &mut Frame, state: &AppState, area: Rect, input_buffer: &st
     let input_text = format!("> {}█", input_buffer);
     let input_widget = Paragraph::new(input_text)
         .block(Block::default().title(" Input ").borders(Borders::ALL).border_style(bstyle))
-        .style(Style::default().fg(Color::White));
+        .style(Style::default().fg(theme.text_primary));
     frame.render_widget(input_widget, input_area);
 }
+
+

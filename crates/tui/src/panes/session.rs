@@ -1,5 +1,5 @@
 use ratatui::layout::Rect;
-use ratatui::style::{Color, Modifier, Style};
+use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Borders, List, ListItem};
 use ratatui::Frame;
@@ -8,7 +8,8 @@ use crate::layout::border_style;
 use crate::state::{AppState, PaneId};
 
 pub fn render(frame: &mut Frame, state: &AppState, area: Rect) {
-    let bstyle = border_style(&PaneId::Sessions, &state.focused_pane);
+    let theme = &state.theme;
+    let bstyle = border_style(&PaneId::Sessions, &state.focused_pane, theme);
 
     let items: Vec<ListItem> = state.sessions.iter().enumerate().map(|(i, s)| {
         let is_active = state.active_session_id.as_deref() == Some(&s.id);
@@ -19,15 +20,18 @@ pub fn render(frame: &mut Frame, state: &AppState, area: Rect) {
             Span::styled(
                 format!("{} {}  ", marker, id_short),
                 if is_active {
-                    Style::default().fg(Color::Green).add_modifier(Modifier::BOLD)
+                    Style::default().fg(theme.auth_ok).add_modifier(Modifier::BOLD)
                 } else {
-                    Style::default().fg(Color::DarkGray)
+                    Style::default().fg(theme.text_dim)
                 },
             ),
-            Span::raw(format!("{} runs:{}", s.status, s.run_count)),
+            Span::styled(
+                format!("{} runs:{}", s.status, s.run_count),
+                Style::default().fg(theme.text_primary),
+            ),
         ]);
         if is_cursor {
-            ListItem::new(line).style(Style::default().bg(Color::DarkGray))
+            ListItem::new(line).style(Style::default().bg(theme.selected_bg).fg(theme.selected_fg))
         } else {
             ListItem::new(line)
         }

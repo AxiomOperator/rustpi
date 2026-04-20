@@ -462,6 +462,9 @@ fn event_summary(event: &AgentEvent) -> String {
         AgentEvent::PolicyDenied { domain, subject, reason, .. } => {
             format!("Policy DENIED [{}] '{}': {}", domain, subject, reason)
         }
+        AgentEvent::DataSourceAccessed { source, detail, .. } => {
+            format!("Data source accessed: {} — {}", source, detail)
+        }
     }
 }
 

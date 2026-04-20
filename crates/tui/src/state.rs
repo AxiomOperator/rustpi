@@ -1,5 +1,6 @@
 use std::collections::VecDeque;
 use chrono::{DateTime, Utc};
+use crate::theme::Theme;
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum PaneId {
@@ -9,6 +10,7 @@ pub enum PaneId {
     Sessions,
     Auth,
     Logs,
+    DataSources,
 }
 
 pub struct AppState {
@@ -22,10 +24,14 @@ pub struct AppState {
     pub session_list_cursor: usize,
     pub providers: Vec<ProviderStatus>,
     pub log_entries: VecDeque<LogEntry>,
+    pub data_sources: VecDeque<DataSourceActivity>,
     pub focused_pane: PaneId,
     pub pending_approval: Option<ApprovalRequest>,
     pub active_run_id: Option<String>,
     pub status_message: Option<String>,
+    pub theme: Theme,
+    pub show_theme_selector: bool,
+    pub theme_selector_cursor: usize,
 }
 
 impl AppState {
@@ -41,11 +47,25 @@ impl AppState {
             session_list_cursor: 0,
             providers: Vec::new(),
             log_entries: VecDeque::new(),
+            data_sources: VecDeque::new(),
             focused_pane: PaneId::Conversation,
             pending_approval: None,
             active_run_id: None,
             status_message: None,
+            theme: crate::theme::matrix(),
+            show_theme_selector: false,
+            theme_selector_cursor: 0,
         }
+    }
+
+    /// Initialize theme from a config name string.
+    pub fn with_theme_name(mut self, name: &str) -> Self {
+        self.theme = crate::theme::by_name(name);
+        self.theme_selector_cursor = crate::theme::all_themes()
+            .iter()
+            .position(|t| t.name == self.theme.name)
+            .unwrap_or(0);
+        self
     }
 }
 
@@ -111,6 +131,13 @@ pub struct SessionSummary {
     pub status: String,
     pub run_count: usize,
     pub created_at: String,
+}
+
+#[derive(Debug, Clone)]
+pub struct DataSourceActivity {
+    pub source: String,
+    pub detail: String,
+    pub timestamp: DateTime<Utc>,
 }
 
 #[derive(Debug, Clone)]

@@ -9,6 +9,7 @@ pub enum KeyAction {
     FocusSessions,
     FocusAuth,
     FocusLogs,
+    FocusDataSources,
     ScrollUp,
     ScrollDown,
     PageUp,
@@ -20,6 +21,7 @@ pub enum KeyAction {
     TypeChar(char),
     Backspace,
     Help,
+    OpenThemeSelector,
     None,
 }
 
@@ -27,12 +29,14 @@ pub fn map_key(key: KeyEvent) -> KeyAction {
     match (key.code, key.modifiers) {
         (KeyCode::Char('q'), KeyModifiers::NONE) => KeyAction::Quit,
         (KeyCode::Char('c'), KeyModifiers::CONTROL) => KeyAction::Quit,
+        (KeyCode::Char('t'), KeyModifiers::CONTROL) => KeyAction::OpenThemeSelector,
         (KeyCode::Char('1'), _) => KeyAction::FocusConversation,
         (KeyCode::Char('2'), _) => KeyAction::FocusTools,
         (KeyCode::Char('3'), _) => KeyAction::FocusContext,
         (KeyCode::Char('4'), _) => KeyAction::FocusSessions,
         (KeyCode::Char('5'), _) => KeyAction::FocusAuth,
         (KeyCode::Char('6'), _) => KeyAction::FocusLogs,
+        (KeyCode::Char('7'), _) => KeyAction::FocusDataSources,
         (KeyCode::Up, _) | (KeyCode::Char('k'), KeyModifiers::NONE) => KeyAction::ScrollUp,
         (KeyCode::Down, _) | (KeyCode::Char('j'), KeyModifiers::NONE) => KeyAction::ScrollDown,
         (KeyCode::PageUp, _) => KeyAction::PageUp,

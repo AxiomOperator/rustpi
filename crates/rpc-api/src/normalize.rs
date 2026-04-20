@@ -397,6 +397,14 @@ pub fn normalize_event(event: &AgentEvent, seq: u64) -> RpcEvent {
             "policy_denied",
             json!({ "domain": domain, "subject": subject, "rule": rule, "reason": reason }),
         ),
+        AgentEvent::DataSourceAccessed { run_id, source, detail, timestamp } => (
+            timestamp.to_rfc3339(),
+            EventCategory::System,
+            None,
+            Some(run_id.to_string()),
+            "data_source_accessed",
+            json!({ "source": source, "detail": detail }),
+        ),
     };
 
     RpcEvent {

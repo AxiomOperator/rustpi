@@ -426,6 +426,16 @@ pub enum AgentEvent {
         reason: String,
         timestamp: DateTime<Utc>,
     },
+
+    /// Emitted whenever a backing data source is accessed during a run.
+    DataSourceAccessed {
+        run_id: RunId,
+        /// "obsidian" | "qdrant" | "postgres" | "context_files"
+        source: String,
+        /// Human-readable summary: file path, collection name, table name, etc.
+        detail: String,
+        timestamp: DateTime<Utc>,
+    },
 }
 
 #[cfg(test)]

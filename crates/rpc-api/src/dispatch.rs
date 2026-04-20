@@ -272,6 +272,13 @@ where
     if let Some(store) = &state.run_store {
         if let Err(e) = store.create_run(sid.clone()).await {
             tracing::warn!("failed to persist run: {}", e);
+        } else {
+            state.event_bus.emit(AgentEvent::DataSourceAccessed {
+                run_id: run_id.clone(),
+                source: "postgres".to_string(),
+                detail: format!("runs — created run {}", run_id),
+                timestamp: Utc::now(),
+            });
         }
     }
 
@@ -306,10 +313,10 @@ where
         }
 
         // 1. Build the system prompt (with optional vault personality).
-        let sys_text = build_system_message().await;
+        let sys_text = build_system_message(&run_id_clone, &state_clone.event_bus).await;
 
         // 2. Build optional context from the working directory.
-        let context_text = build_context_messages(&prompt_str, &sid_clone, Arc::clone(&state_clone.memory_retriever)).await;
+        let context_text = build_context_messages(&prompt_str, &sid_clone, Arc::clone(&state_clone.memory_retriever), &run_id_clone, &state_clone.event_bus).await;
 
         // 3. Assemble the message list: system prompt first, then optional context, then user.
         let mut messages: Vec<ChatMessage> = vec![ChatMessage {
@@ -850,18 +857,29 @@ async fn emit_run_failed<W>(
 
 /// Build the primary system message from the Obsidian vault personality.
 /// Returns an empty string if no vault is configured or loading fails.
-async fn build_system_message() -> String {
-    try_load_personality().await.unwrap_or_default()
+async fn build_system_message(run_id: &RunId, event_bus: &agent_core::bus::EventBus) -> String {
+    try_load_personality(run_id, event_bus).await.unwrap_or_default()
 }
 
 /// Try to load personality sections from the configured Obsidian vault.
 /// Returns `None` if no vault is configured or loading fails — always non-fatal.
-async fn try_load_personality() -> Option<String> {
+async fn try_load_personality(run_id: &RunId, event_bus: &agent_core::bus::EventBus) -> Option<String> {
     let config = config_core::ConfigLoader::new().load().ok()?;
     let vault_path = config.memory.obsidian_vault_path.as_ref()?.clone();
 
+    // Resolve personality subfolder (default: "personality")
+    let subfolder = config.memory.obsidian_personality_subfolder
+        .as_deref()
+        .unwrap_or("personality");
+    let personality_path = if subfolder.is_empty() || subfolder == "." {
+        vault_path.clone()
+    } else {
+        vault_path.join(subfolder)
+    };
+    let vault_path_display = personality_path.display().to_string();
+
     let result = tokio::task::spawn_blocking(move || {
-        let accessor = memory_sync::VaultAccessor::open(&vault_path).ok()?;
+        let accessor = memory_sync::VaultAccessor::open(&personality_path).ok()?;
         let personality_cfg = memory_sync::PersonalityConfig::default();
         memory_sync::load_personality(&accessor, &personality_cfg).ok()
     })
@@ -870,6 +888,21 @@ async fn try_load_personality() -> Option<String> {
     .flatten();
 
     result.map(|ctx| {
+        let section_names: Vec<String> = ctx.sections
+            .iter()
+            .map(|s| format!("{:?}", s.source_doc))
+            .collect();
+        let detail = if section_names.is_empty() {
+            format!("vault: {}", vault_path_display)
+        } else {
+            format!("vault: {} — sections: {}", vault_path_display, section_names.join(", "))
+        };
+        event_bus.emit(AgentEvent::DataSourceAccessed {
+            run_id: run_id.clone(),
+            source: "obsidian".to_string(),
+            detail,
+            timestamp: Utc::now(),
+        });
         ctx.sections
             .iter()
             .map(|s| s.content.trim().to_string())
@@ -885,6 +918,8 @@ async fn build_context_messages(
     prompt: &str,
     _session_id: &SessionId,
     memory: Arc<dyn context_engine::memory::MemoryRetriever>,
+    run_id: &RunId,
+    event_bus: &agent_core::bus::EventBus,
 ) -> Option<String> {
     use context_engine::{ContextEngine, EngineConfig, RelevanceHints};
 
@@ -913,6 +948,28 @@ async fn build_context_messages(
                 stats.files_selected,
                 packed.total_tokens
             );
+            // Emit one event listing all selected files
+            let file_list: Vec<String> = packed.blocks
+                .iter()
+                .map(|b| b.path.display().to_string())
+                .collect();
+            if !file_list.is_empty() {
+                event_bus.emit(AgentEvent::DataSourceAccessed {
+                    run_id: run_id.clone(),
+                    source: "context_files".to_string(),
+                    detail: file_list.join(", "),
+                    timestamp: Utc::now(),
+                });
+            }
+            // Emit Qdrant event if memory snippets were included
+            if stats.memory_snippets > 0 {
+                event_bus.emit(AgentEvent::DataSourceAccessed {
+                    run_id: run_id.clone(),
+                    source: "qdrant".to_string(),
+                    detail: format!("{} snippet(s) retrieved for: {}", stats.memory_snippets, prompt.chars().take(80).collect::<String>()),
+                    timestamp: Utc::now(),
+                });
+            }
             let mut ctx = format!(
                 "# Project Context ({} files, ~{} tokens)\n\n",
                 stats.files_selected, packed.total_tokens

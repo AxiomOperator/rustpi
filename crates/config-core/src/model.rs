@@ -65,6 +65,9 @@ pub enum ProviderAuthConfig {
 pub struct MemoryConfig {
     /// Path to the Obsidian vault for human-readable memory.
     pub obsidian_vault_path: Option<PathBuf>,
+    /// Subfolder within the vault that contains personality docs (SOUL.md etc.).
+    /// Defaults to "personality" when unset. Set to "" or "." to use vault root.
+    pub obsidian_personality_subfolder: Option<String>,
     /// Session storage backend.
     pub session_backend: SessionBackend,
     /// Whether to enable Qdrant vector memory.

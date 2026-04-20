@@ -1,5 +1,6 @@
 use ratatui::layout::{Constraint, Direction, Layout, Rect};
 use crate::state::PaneId;
+use crate::theme::Theme;
 
 pub struct PaneRects {
     pub conversation: Rect,
@@ -8,6 +9,7 @@ pub struct PaneRects {
     pub status_bar: Rect,
     pub sessions: Rect,
     pub context: Rect,
+    pub data_sources: Rect,
     pub auth: Rect,
     pub logs: Rect,
 }
@@ -41,10 +43,11 @@ pub fn compute_layout(area: Rect) -> PaneRects {
     let bottom_split = Layout::default()
         .direction(Direction::Horizontal)
         .constraints([
-            Constraint::Percentage(25),
-            Constraint::Percentage(25),
-            Constraint::Percentage(25),
-            Constraint::Percentage(25),
+            Constraint::Percentage(20),
+            Constraint::Percentage(20),
+            Constraint::Percentage(30),
+            Constraint::Percentage(15),
+            Constraint::Percentage(15),
         ])
         .split(bottom_area);
 
@@ -55,16 +58,17 @@ pub fn compute_layout(area: Rect) -> PaneRects {
         input_bar,
         sessions: bottom_split[0],
         context: bottom_split[1],
-        auth: bottom_split[2],
-        logs: bottom_split[3],
+        data_sources: bottom_split[2],
+        auth: bottom_split[3],
+        logs: bottom_split[4],
     }
 }
 
-pub fn border_style(pane: &PaneId, focused: &PaneId) -> ratatui::style::Style {
-    use ratatui::style::{Color, Style};
+pub fn border_style(pane: &PaneId, focused: &PaneId, theme: &Theme) -> ratatui::style::Style {
+    use ratatui::style::Style;
     if pane == focused {
-        Style::default().fg(Color::Cyan)
+        Style::default().fg(theme.border_focused)
     } else {
-        Style::default().fg(Color::DarkGray)
+        Style::default().fg(theme.border_unfocused)
     }
 }
