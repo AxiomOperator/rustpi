@@ -37,8 +37,10 @@ pub fn map_key(key: KeyEvent) -> KeyAction {
         (KeyCode::Char('5'), _) => KeyAction::FocusAuth,
         (KeyCode::Char('6'), _) => KeyAction::FocusLogs,
         (KeyCode::Char('7'), _) => KeyAction::FocusDataSources,
-        (KeyCode::Up, _) | (KeyCode::Char('k'), KeyModifiers::NONE) => KeyAction::ScrollUp,
-        (KeyCode::Down, _) | (KeyCode::Char('j'), KeyModifiers::NONE) => KeyAction::ScrollDown,
+        (KeyCode::Up, _) => KeyAction::ScrollUp,
+        (KeyCode::Down, _) => KeyAction::ScrollDown,
+        // 'j'/'k' type into the input buffer (they do NOT scroll — use arrow keys for that).
+        // This prevents losing the ability to type these common letters.
         (KeyCode::PageUp, _) => KeyAction::PageUp,
         (KeyCode::PageDown, _) => KeyAction::PageDown,
         (KeyCode::Char('i'), KeyModifiers::CONTROL) => KeyAction::Interrupt,

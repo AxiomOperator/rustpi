@@ -32,6 +32,7 @@ pub struct AppState {
     pub theme: Theme,
     pub show_theme_selector: bool,
     pub theme_selector_cursor: usize,
+    pub model_name: String,
 }
 
 impl AppState {
@@ -55,6 +56,7 @@ impl AppState {
             theme: crate::theme::matrix(),
             show_theme_selector: false,
             theme_selector_cursor: 0,
+            model_name: String::new(),
         }
     }
 

@@ -47,6 +47,14 @@ impl App {
         let mut state = AppState::new().with_theme_name(&config.tui.theme);
         state.providers = providers;
 
+        // Resolve the active model name from config (user preferred → project default → global default)
+        state.model_name = config.user.preferred_model
+            .as_ref()
+            .or(config.project.default_model.as_ref())
+            .or(config.global.default_model.as_ref())
+            .map(|m| m.to_string())
+            .unwrap_or_else(|| "unknown".to_string());
+
         Self {
             state,
             server_state,
@@ -225,7 +233,7 @@ impl App {
             KeyAction::ApproveAction | KeyAction::DenyAction => {}
             KeyAction::Help => {
                 self.state.status_message = Some(
-                    "Keys: 1-7 focus panes | q quit | Ctrl+C quit | j/k scroll | Ctrl+I interrupt | y/n approve | Ctrl+T theme".to_string()
+                    "Keys: 1-7 focus panes | q quit | Ctrl+C quit | ↑/↓ scroll | PgUp/PgDn | Ctrl+I interrupt | y/n approve | Ctrl+T theme".to_string()
                 );
             }
             KeyAction::OpenThemeSelector => {
@@ -500,6 +508,32 @@ pub fn apply_agent_event(state: &mut AppState, event: AgentEvent) {
             });
             trim_log(state);
         }
+        AgentEvent::ToolResultSubmitted { result, .. } => {
+            // Surface tool results visibly in the conversation so the user doesn't have to ask.
+            let summary = if result.success {
+                // For memory_note, extract the saved path for a clear confirmation.
+                if let Some(saved) = result.output.get("saved").and_then(|v| v.as_str()) {
+                    format!("✓ Saved to {}", saved)
+                } else {
+                    let out = result.output.to_string();
+                    format!("✓ Tool result: {}", if out.len() > 120 { format!("{}…", &out[..120]) } else { out })
+                }
+            } else {
+                let err_owned = result.output.get("error").and_then(|v| v.as_str()).map(|s| s.to_string()).unwrap_or_else(|| result.output.to_string());
+                format!("✗ Tool error: {}", err_owned)
+            };
+            state.messages.push(ChatMessage {
+                role: MessageRole::Tool,
+                content: summary.clone(),
+                timestamp: chrono::Utc::now(),
+            });
+            state.log_entries.push_back(LogEntry {
+                level: if result.success { "info" } else { "warn" }.to_string(),
+                message: summary,
+                timestamp: chrono::Utc::now(),
+            });
+            trim_log(state);
+        }
         AgentEvent::DataSourceAccessed { source, detail, timestamp, .. } => {
             while state.data_sources.len() >= 200 {
                 state.data_sources.pop_front();
@@ -536,10 +570,12 @@ fn render_status_bar(frame: &mut ratatui::Frame, state: &AppState, area: ratatui
     let session = state.active_session_id.as_deref().unwrap_or("none");
     let run_status = if state.active_run_id.is_some() { "active" } else { "idle" };
     let msg = state.status_message.as_deref().unwrap_or("");
+    let model = &state.model_name;
     let theme = &state.theme;
 
     let text = format!(
-        " [Session: {}] [Run: {}] {} | 1-7 panes | q quit | Ctrl+I interrupt | y/n approve | Ctrl+T theme | ? help",
+        " [Model: {}] [Session: {}] [Run: {}] {} | 1-7 panes | q quit | Ctrl+I interrupt | y/n approve | Ctrl+T theme | ? help",
+        model,
         &session[..session.len().min(8)],
         run_status,
         msg,

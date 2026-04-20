@@ -35,32 +35,39 @@ pub fn compute_layout(area: Rect) -> PaneRects {
     let input_bar = vertical[2];
     let bottom_area = vertical[3];
 
+    // Top: conversation (left 60%) | right column (40%)
     let top_split = Layout::default()
         .direction(Direction::Horizontal)
         .constraints([Constraint::Percentage(60), Constraint::Percentage(40)])
         .split(top_area);
 
+    // Right column: Tools (top 50%) | Logs (bottom 50%)
+    let right_split = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([Constraint::Percentage(50), Constraint::Percentage(50)])
+        .split(top_split[1]);
+
+    // Bottom strip: Sessions | Context | DataSources | Auth
     let bottom_split = Layout::default()
         .direction(Direction::Horizontal)
         .constraints([
-            Constraint::Percentage(20),
-            Constraint::Percentage(20),
-            Constraint::Percentage(30),
-            Constraint::Percentage(15),
+            Constraint::Percentage(25),
+            Constraint::Percentage(25),
+            Constraint::Percentage(35),
             Constraint::Percentage(15),
         ])
         .split(bottom_area);
 
     PaneRects {
         conversation: top_split[0],
-        tools: top_split[1],
+        tools: right_split[0],
+        logs: right_split[1],
         status_bar,
         input_bar,
         sessions: bottom_split[0],
         context: bottom_split[1],
         data_sources: bottom_split[2],
         auth: bottom_split[3],
-        logs: bottom_split[4],
     }
 }
 

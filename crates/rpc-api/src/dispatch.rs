@@ -315,20 +315,25 @@ where
         // 1. Build the system prompt (with optional vault personality).
         let sys_text = build_system_message(&run_id_clone, &state_clone.event_bus).await;
 
-        // 2. Build optional context from the working directory.
+        // 2. Build optional context from the working directory / memory.
         let context_text = build_context_messages(&prompt_str, &sid_clone, Arc::clone(&state_clone.memory_retriever), &run_id_clone, &state_clone.event_bus).await;
 
-        // 3. Assemble the message list: system prompt first, then optional context, then user.
+        // 3. Assemble the message list.
+        //    Many local-model chat templates (Qwen, LLaMA, Mistral) require the system
+        //    message to be exactly one entry at position 0.  Merge context into that
+        //    single system message rather than appending a second one.
+        let base_instructions = "\n\n---\n\nTool usage rules:\n\
+            - When you call memory_note to save something, always tell the user the exact filename you saved it to and confirm success or failure.\n\
+            - Never claim to have saved, stored, or remembered something unless you have actually called and received a successful result from the memory_note tool.\n\
+            - If a tool call fails, tell the user explicitly what went wrong.";
+        let combined_sys = match context_text {
+            Some(ctx) => format!("{}{}\n\n---\n\n{}", sys_text, base_instructions, ctx),
+            None => format!("{}{}", sys_text, base_instructions),
+        };
         let mut messages: Vec<ChatMessage> = vec![ChatMessage {
             role: Role::System,
-            content: MessageContent::Text(sys_text),
+            content: MessageContent::Text(combined_sys),
         }];
-        if let Some(ctx) = context_text {
-            messages.push(ChatMessage {
-                role: Role::System,
-                content: MessageContent::Text(ctx),
-            });
-        }
         messages.push(ChatMessage {
             role: Role::User,
             content: MessageContent::Text(prompt_str.clone()),
@@ -377,8 +382,28 @@ where
             };
 
             // 4. Start streaming completion.
+            // If the provider rejects tool schemas (e.g. local models whose chat template
+            // does not support tool calling), transparently retry without tools so the
+            // conversation continues in plain-text mode.
             let stream = match provider_arc.complete_stream(request).await {
                 Ok(s) => s,
+                Err(model_adapters::ProviderError::Unavailable(_) | model_adapters::ProviderError::ApiError { status: 400..=599, .. }) => {
+                    tracing::warn!("provider rejected request (possibly tool-schema incompatibility); retrying without tools");
+                    let fallback = CompletionRequest {
+                        model: model_clone.clone(),
+                        messages: conversation.clone(),
+                        max_tokens: Some(2048),
+                        temperature: Some(0.7),
+                        tools: vec![],
+                    };
+                    match provider_arc.complete_stream(fallback).await {
+                        Ok(s) => s,
+                        Err(e) => {
+                            emit_run_failed(&state_clone, &writer_clone, &run_id_clone, e.to_string()).await;
+                            return;
+                        }
+                    }
+                }
                 Err(e) => {
                     emit_run_failed(&state_clone, &writer_clone, &run_id_clone, e.to_string()).await;
                     return;
@@ -1178,7 +1203,7 @@ async fn try_load_personality(run_id: &RunId, event_bus: &agent_core::bus::Event
         });
         ctx.sections
             .iter()
-            .map(|s| s.content.trim().to_string())
+            .map(|s| format!("### [{}]\n\n{}", s.source_doc.filename(), s.content.trim()))
             .filter(|s| !s.is_empty())
             .collect::<Vec<_>>()
             .join("\n\n")
